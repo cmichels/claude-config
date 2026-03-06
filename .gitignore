@@ -1,0 +1,51 @@
+# ===== SENSITIVE — never commit =====
+.mcp.json
+mcp-needs-auth-cache.json
+stats-cache.json
+statsig/
+
+# ===== Ephemeral / machine-specific state =====
+# Session histories (1.3GB+)
+projects/
+
+# Debug & telemetry
+debug/
+telemetry/
+
+# File edit history & backups
+file-history/
+backups/
+
+# Conversation history
+history.jsonl
+
+# Shell & session state
+shell-snapshots/
+session-env/
+paste-cache/
+
+# Tasks & todos (session-specific)
+tasks/
+todos/
+
+# Plugins (reinstallable via claude settings)
+plugins/
+
+# Cache
+cache/
+
+# Usage reports
+usage-data/
+
+# Plans (ephemeral)
+plans/
+
+# Reviews (empty / ephemeral)
+reviews/
+
+# Nested .claude internal state
+.claude/
+
+# OS junk
+.DS_Store
+._*
