@@ -42,34 +42,11 @@ Run these in parallel:
 5. **Get existing comments**: `mcp__github-cli__get_pull_request_comments`
    - Extract: inline comments already posted
 
-6. **Get review thread resolution status** via GraphQL:
+6. **Get review thread resolution status** via the pre-built bin script (auto-approved):
    ```bash
-   gh api graphql -f query='
-   {
-     repository(owner: "OWNER", name: "REPO") {
-       pullRequest(number: PR_NUMBER) {
-         reviewThreads(first: 100) {
-           nodes {
-             id
-             isResolved
-             isOutdated
-             comments(first: 10) {
-               nodes {
-                 author { login }
-                 body
-                 path
-                 line
-                 originalLine
-                 createdAt
-               }
-             }
-           }
-         }
-       }
-     }
-   }'
+   /home/kuda/.claude/bin/pr-review-threads.sh <owner> <repo> <pr_number>
    ```
-   Extract: thread ID, `isResolved`, `isOutdated`, path, line, and the comment chain per thread.
+   Extract from the JSON output: thread ID, `isResolved`, `isOutdated`, path, line, and the comment chain per thread.
 
 ---
 
@@ -348,7 +325,10 @@ Your domain:
 - Scalability: designs that won't hold up under load or increased data volume
 - Technical debt: shortcuts that compound future work
 
-Rate each finding confidence 0-100. Only report findings with confidence >= 80.
+Rate each finding confidence 0-100. Apply the confidence thresholds from the guidelines below.
+
+**Before reviewing**, read `~/.claude/review-guidelines.md` and apply the calibration for your domain:
+- **Architecture & Design**: Confidence threshold >= 90 (raised — only 20% adoption rate). Phrase tradeoff-aware findings as "Confirm this is intentional: [explain the tradeoff]" rather than "This should be changed." Focus on: naming/enum consistency (100% adoption when low-risk), breaking API changes with no migration path. For infrastructure-scope architecture (hardcoded hostnames in docker scripts), apply devops-file provenance check. For tech debt requiring separate migration, flag once with "[Deferred OK — track separately]".
 
 The full PR context is below. You have Read, Glob, Grep, Bash tools to explore the broader codebase architecture.
 
@@ -359,12 +339,13 @@ The full PR context is below. You have Read, Glob, Grep, Bash tools to explore t
 ## Your Task
 
 1. Claim task 3 from the task list ("Initial architecture and design review")
-2. Review the PR diff for architectural concerns — explore surrounding code to understand the broader system design
-3. Before finalizing each finding, check `previous_review_threads` in the context:
+2. Read `~/.claude/review-guidelines.md` — focus on the "Architecture & Design" domain section and the "Cross-Domain Insights" section
+3. Review the PR diff for architectural concerns — explore surrounding code to understand the broader system design
+4. Before finalizing each finding, check `previous_review_threads` in the context:
    - If an **unresolved** thread (`is_resolved: false`) exists at the same file/line for the same concern → tag the finding as `"recurring": true` and note which previous reviewer raised it. Elevate its priority.
    - If a **resolved** thread exists for the same concern → only include your finding if the fix introduced a new problem. Otherwise skip it.
    - If `is_outdated: true` on a thread → the code moved; the original concern may still apply, check the current diff.
-4. When done, mark task 3 complete and message the lead with your findings in this JSON format:
+5. When done, mark task 3 complete and message the lead with your findings in this JSON format:
 
 {
   "domain": "architecture",
@@ -380,7 +361,7 @@ The full PR context is below. You have Read, Glob, Grep, Bash tools to explore t
   ]
 }
 
-5. After sending findings to the lead, await the cross-review discussion (task 5). Share your top 3 findings with the team. If architectural issues have security implications or code quality implications, flag them to the relevant reviewers directly by name.
+6. After sending findings to the lead, await the cross-review discussion (task 5). Share your top 3 findings with the team. If architectural issues have security implications or code quality implications, flag them to the relevant reviewers directly by name.
 ```
 
 ### Teammate 4: coverage-and-style
@@ -398,7 +379,11 @@ Your domain:
 
 Style findings do NOT affect the final verdict (approve/request_changes/comment) — flag them but do not block.
 
-Rate each finding confidence 0-100. Only report findings with confidence >= 80.
+Rate each finding confidence 0-100. Apply the confidence thresholds from the guidelines below.
+
+**Before reviewing**, read `~/.claude/review-guidelines.md` and apply the calibration for your domains:
+- **Test Coverage**: Confidence threshold >= 75 (lowered — 100% adoption rate). Focus on: new public methods with zero test coverage when sibling methods are tested. Include the existing spec file location and test structure in comments to reduce friction.
+- **Style & Conventions**: Confidence threshold >= 95 (near-maximum — advisory only). Only post style comments when: (1) the violation is in a file already being modified for functional reasons, OR (2) the inconsistency would cause a lint error in CI. Mark all style comments as `[Style — non-blocking]`.
 
 The full PR context is below. You have Read, Glob, Grep, Bash tools to explore existing tests for context.
 
@@ -409,12 +394,13 @@ The full PR context is below. You have Read, Glob, Grep, Bash tools to explore e
 ## Your Task
 
 1. Claim task 4 from the task list ("Initial test coverage and style review")
-2. Review the PR diff — check test files for coverage gaps and non-test files for untested paths
-3. Before finalizing each finding, check `previous_review_threads` in the context:
+2. Read `~/.claude/review-guidelines.md` — focus on the "Test Coverage" and "Style & Conventions" domain sections
+3. Review the PR diff — check test files for coverage gaps and non-test files for untested paths
+4. Before finalizing each finding, check `previous_review_threads` in the context:
    - If an **unresolved** thread (`is_resolved: false`) exists at the same file/line for the same concern → tag the finding as `"recurring": true` and note which previous reviewer raised it. Elevate its priority.
    - If a **resolved** thread exists for the same concern → only include your finding if the fix introduced a new problem. Otherwise skip it.
    - If `is_outdated: true` on a thread → the code moved; the original concern may still apply, check the current diff.
-4. When done, mark task 4 complete and message the lead with your findings in this JSON format:
+5. When done, mark task 4 complete and message the lead with your findings in this JSON format:
 
 {
   "domain": "coverage-and-style",
@@ -430,7 +416,7 @@ The full PR context is below. You have Read, Glob, Grep, Bash tools to explore e
   ]
 }
 
-5. After sending findings to the lead, await the cross-review discussion (task 5). Share your top 3 coverage gaps with the team. If the security reviewer flagged a vulnerability, proactively check whether there are tests covering that failure path and report back to them directly.
+6. After sending findings to the lead, await the cross-review discussion (task 5). Share your top 3 coverage gaps with the team. If the security reviewer flagged a vulnerability, proactively check whether there are tests covering that failure path and report back to them directly.
 ```
 
 ---
