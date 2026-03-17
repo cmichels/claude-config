@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# ccc — Claude Clean Sessions
+# Removes stale pane-session mappings.
+# Usage: ccc [-a]
+#   No args: removes sessions for panes that no longer exist in tmux
+#   -a:      removes ALL saved sessions
+
+set -euo pipefail
+
+SESSIONS_DIR="$HOME/.claude/pane-sessions"
+
+if [[ ! -d "$SESSIONS_DIR" ]] || [[ -z "$(ls -A "$SESSIONS_DIR" 2>/dev/null)" ]]; then
+  echo "ccc: no saved sessions to clean" >&2
+  exit 0
+fi
+
+# Nuke everything
+if [[ "${1:-}" == "-a" ]]; then
+  count=$(ls -1 "$SESSIONS_DIR"/*.json 2>/dev/null | wc -l)
+  rm -f "$SESSIONS_DIR"/*.json
+  echo "ccc: removed all $count session(s)" >&2
+  exit 0
+fi
+
+# Get list of active tmux pane IDs (stripped of %)
+active_panes=$(tmux list-panes -a -F '#{pane_id}' 2>/dev/null | sed 's/^%//' || true)
+
+removed=0
+kept=0
+for f in "$SESSIONS_DIR"/*.json; do
+  [[ -f "$f" ]] || continue
+  pane_id=$(basename "$f" .json)
+  if echo "$active_panes" | grep -qx "$pane_id"; then
+    kept=$((kept + 1))
+  else
+    rm -f "$f"
+    removed=$((removed + 1))
+  fi
+done
+
+echo "ccc: removed $removed stale, kept $kept active" >&2

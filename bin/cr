@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# cr — Claude Resume
+# Resumes the saved claude session for the current tmux pane.
+# Falls back to cwd-based lookup if pane ID not found.
+# Usage: cr [claude args...]
+
+set -euo pipefail
+
+SESSIONS_DIR="$HOME/.claude/pane-sessions"
+
+if [[ ! -d "$SESSIONS_DIR" ]]; then
+  echo "cr: no saved sessions found ($SESSIONS_DIR does not exist)" >&2
+  exit 1
+fi
+
+SESSION_ID=""
+SOURCE=""
+
+# Strategy 1: lookup by tmux pane ID
+if [[ -n "${TMUX_PANE:-}" ]]; then
+  PANE_ID="${TMUX_PANE#%}"
+  SESSION_FILE="$SESSIONS_DIR/$PANE_ID.json"
+  if [[ -f "$SESSION_FILE" ]]; then
+    SESSION_ID=$(jq -r '.sessionId' "$SESSION_FILE" 2>/dev/null)
+    SOURCE="pane %$PANE_ID"
+  fi
+fi
+
+# Strategy 2: fallback to cwd match across all session files
+if [[ -z "$SESSION_ID" ]]; then
+  CWD=$(pwd)
+  for f in "$SESSIONS_DIR"/*.json; do
+    [[ -f "$f" ]] || continue
+    file_cwd=$(jq -r '.cwd' "$f" 2>/dev/null)
+    if [[ "$file_cwd" == "$CWD" ]]; then
+      SESSION_ID=$(jq -r '.sessionId' "$f" 2>/dev/null)
+      SOURCE="cwd match ($CWD)"
+      break
+    fi
+  done
+fi
+
+if [[ -z "$SESSION_ID" ]]; then
+  echo "cr: no saved session for this pane or directory" >&2
+  echo "cr: use 'cls' to list saved sessions, or 'claude --resume' for the interactive picker" >&2
+  exit 1
+fi
+
+echo "cr: resuming session $SESSION_ID (matched via $SOURCE)" >&2
+exec claude --resume "$SESSION_ID" "$@"

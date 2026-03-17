@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# ccs — Claude Code Start
+# Launches claude with a tracked session ID keyed to the current tmux pane.
+# Session state saved to ~/.claude/pane-sessions/<pane-id>.json
+# Usage: ccs [claude args...]
+
+set -euo pipefail
+
+SESSIONS_DIR="$HOME/.claude/pane-sessions"
+mkdir -p "$SESSIONS_DIR"
+
+# Require tmux
+if [[ -z "${TMUX_PANE:-}" ]]; then
+  echo "ccs: not inside a tmux pane, launching claude directly" >&2
+  exec claude "$@"
+fi
+
+PANE_ID="${TMUX_PANE#%}"
+WINDOW_NAME=$(tmux display-message -p '#{window_name}' 2>/dev/null || echo "unknown")
+CWD=$(pwd)
+SESSION_ID=$(uuidgen 2>/dev/null || python3 -c 'import uuid; print(uuid.uuid4())')
+SESSION_FILE="$SESSIONS_DIR/$PANE_ID.json"
+
+# Save session mapping before launch
+cat > "$SESSION_FILE" <<EOF
+{"sessionId":"$SESSION_ID","paneId":"$PANE_ID","windowName":"$WINDOW_NAME","cwd":"$CWD","createdAt":"$(date -Iseconds)"}
+EOF
+
+echo "ccs: session $SESSION_ID saved for pane %$PANE_ID ($WINDOW_NAME)" >&2
+
+# Launch claude with the pre-generated session ID and window name
+exec claude --session-id "$SESSION_ID" --name "$WINDOW_NAME" "$@"

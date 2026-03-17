@@ -34,6 +34,42 @@ The setup script will:
 | `status-line.sh` | Custom status bar script |
 | `.mcp.json.template` | MCP server config template (no secrets) |
 | `setup.sh` | New machine bootstrap |
+| `bin/` | CLI scripts (session management, repo helpers) |
+
+## bin/ — CLI Scripts
+
+Session management tools for running multiple Claude sessions across tmux windows.
+
+| Script | Usage | Description |
+|---|---|---|
+| `ccs` | `ccs [args...]` | Start a new Claude session. Generates a session ID, saves it keyed to the current tmux pane, and launches `claude --session-id <id> --name <window>`. All args passed through. |
+| `cr` | `cr [args...]` | Resume the saved session for the current tmux pane. Falls back to cwd-based lookup if pane ID isn't found. |
+| `cls` | `cls` | List all saved pane-session mappings (pane, window name, cwd, session ID, timestamp). |
+
+Session state is stored in `~/.claude/pane-sessions/<pane-id>.json`.
+
+### Setup
+
+Scripts are symlinked to `~/.local/bin/` (must be in `$PATH`):
+
+```bash
+ln -sf ~/projects/personal/claude-config/bin/ccs ~/.local/bin/ccs
+ln -sf ~/projects/personal/claude-config/bin/cr ~/.local/bin/cr
+ln -sf ~/projects/personal/claude-config/bin/cls ~/.local/bin/cls
+```
+
+Optional alias in your shell config:
+
+```bash
+alias claude=ccs
+```
+
+Also includes utility scripts used by Claude Code skills:
+
+| Script | Description |
+|---|---|
+| `repo-info.sh` | Outputs git repo metadata (name, branch, toplevel path) |
+| `worktree-exists.sh` | Checks if a directory exists (exit 0/1) |
 
 ## What's NOT Tracked
 

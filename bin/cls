@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# cls — Claude List Sessions
+# Lists all saved pane-session mappings.
+# Usage: cls
+
+SESSIONS_DIR="$HOME/.claude/pane-sessions"
+
+if [[ ! -d "$SESSIONS_DIR" ]] || [[ -z "$(ls -A "$SESSIONS_DIR" 2>/dev/null)" ]]; then
+  echo "cls: no saved sessions" >&2
+  exit 0
+fi
+
+# Header
+printf "%-6s  %-20s  %-40s  %-36s  %s\n" "PANE" "WINDOW" "CWD" "SESSION ID" "SAVED AT"
+printf "%-6s  %-20s  %-40s  %-36s  %s\n" "----" "------" "---" "----------" "--------"
+
+# Sort by saved time descending
+for f in "$SESSIONS_DIR"/*.json; do
+  [[ -f "$f" ]] || continue
+  jq -r '[.paneId, .windowName, .cwd, .sessionId, .createdAt] | @tsv' "$f" 2>/dev/null
+done | sort -t$'\t' -k5 -r | while IFS=$'\t' read -r pane window cwd sid saved; do
+  # Shorten cwd: replace $HOME with ~
+  short_cwd="${cwd/#$HOME/~}"
+  printf "%-6s  %-20s  %-40s  %-36s  %s\n" "%$pane" "$window" "$short_cwd" "$sid" "$saved"
+done

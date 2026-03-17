@@ -120,6 +120,14 @@ Filter out files matching these patterns from the changed files list. These file
 - `.DS_Store`, `Thumbs.db`
 - `.idea/`, `.vscode/` (unless PR explicitly changes IDE config)
 
+**Infrastructure & DevOps files (excluded entirely — do not review):**
+- `docker/` and any path under a `docker/` directory
+- `Dockerfile`, `*.Dockerfile`, `Dockerfile.*`
+- `docker-compose*.yml`, `docker-compose*.yaml`
+- `*.sh` shell scripts
+- `*.conf` files in infra/docker directories (e.g., `mosquitto.conf`, `nginx.conf`)
+- `.env.example`, `.env.*`
+
 Store excluded files as `$FILTERED_FILES[]` for reporting in the terminal summary. Continue with remaining files only.
 
 ## Step 4: Read File Diffs
@@ -244,7 +252,14 @@ strategic context, and confidence level.
 Extract the JSON response from each review agent. If an agent's response isn't valid JSON, extract what you can and note the parsing issue. The motivation analysis agent returns markdown prose (not JSON) — store it verbatim for inclusion in the terminal summary.
 
 ### Merge Inline Comments
-Combine all comments from all 4 agents into a single array. Deduplicate comments that target the same file+line and address the same issue (keep the more detailed one).
+Combine all comments from all 4 agents into a single array. Apply these rules in order:
+
+1. **Drop infra-file comments**: Remove any comment targeting a file in `$FILTERED_FILES[]`.
+2. **Deduplicate within session**: same file+line addressing the same issue from multiple agents → keep the more detailed one.
+3. **Deduplicate against existing comments**: For each candidate comment, check `existing_comments` from Step 2. If any previous reviewer (including Copilot, human reviewers, or a prior agent review) already posted a comment within ±5 lines of the same file addressing the same concern:
+   - If the author replied with "fixed" / "addressed" / "done" → drop it entirely.
+   - If it is unresolved → mark as `recurring: true` and note the existing comment; don't re-describe the issue.
+   - If the author replied explaining a decision (not fixing it) → drop it; the decision was made.
 
 Cap total inline comments at 20. If more than 20, prioritize:
 1. Security findings (highest priority)
@@ -304,6 +319,28 @@ Use `mcp__github-cli__create_pull_request_review` directly:
 ```
 
 If this succeeds, record: `post_method = "MCP"`, `post_success = true`.
+
+### Attempt 1 Verification
+
+After a successful MCP post, verify the inline comments were actually stored — **do not skip this step**:
+
+```bash
+gh api "repos/<owner>/<repo>/pulls/<pr_number>/comments" \
+  --jq '[.[] | select(.pull_request_review_id == <REVIEW_ID>)] | length'
+```
+
+- If count equals `len(merged_inline_comments)` → verification passed.
+- If count is **less than expected**: identify missing comments (compare paths/lines) and post them as a follow-up body comment:
+  ```bash
+  gh pr comment <pr_number> --repo '<owner>/<repo>' --body "$(cat <<'EOF'
+  **Inline comments that failed to attach (line resolution):**
+  - **path/to/file.ext:42** — [Category] Comment body
+  EOF
+  )"
+  ```
+  Record: `post_method = "MCP (partial — N comments inlined in body)"`.
+
+**NEVER write inline comment content directly in the review body text** as a workaround — always use the `comments` array or these explicit fallback formats.
 
 ### Attempt 1b: MCP Retry Without Inline Comments (Line Resolution Fallback)
 
@@ -441,3 +478,6 @@ If posting failed (Step 8 Attempt 3), also output the full review body so it can
 - The **Motivation & Intent Analysis** is terminal-only — it is NOT included in the GitHub review body (it's subjective and for the reviewer's benefit, not the PR author's)
 - **Never silently fail on posting** — if MCP and CLI both fail for GitHub or Atlassian, always ask the user to intervene via `AskUserQuestion`
 - For Atlassian MCP failures, always try `acli` CLI before asking the user (see Step 8b)
+- **Never embed inline comment content in the review body text** outside of the explicit fallback formats — always post via the `comments` array or the Attempt 1 Verification follow-up pattern
+- **Post exactly one review** — do not retry with the same inline comments if the call succeeds. Check the verification step before assuming anything failed. Duplicate posts are a known issue.
+- **Previous reviewer comments count** — `existing_comments` loaded in Step 2 includes Copilot and prior agent reviews. If those already cover a finding and the author responded, do not re-raise it. Apply the dedup logic in Step 7 before finalizing the inline list.

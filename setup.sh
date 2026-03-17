@@ -68,7 +68,21 @@ if [ -d "$CLAUDE_DIR/memories" ]; then
   echo "[done] Restored $restored project memory sets"
 fi
 
-# --- Step 4: Ensure nested settings.local.json ---
+# --- Step 4: Symlink bin/ scripts ---
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -L "$CLAUDE_DIR/bin" ]; then
+  echo "[skip] bin symlink already exists"
+elif [ -d "$CLAUDE_DIR/bin" ]; then
+  echo "[warn] $CLAUDE_DIR/bin is a real directory, replacing with symlink"
+  rm -rf "$CLAUDE_DIR/bin"
+  ln -s "$REPO_DIR/bin" "$CLAUDE_DIR/bin"
+  echo "[done] Created bin symlink"
+else
+  ln -s "$REPO_DIR/bin" "$CLAUDE_DIR/bin"
+  echo "[done] Created bin symlink"
+fi
+
+# --- Step 5: Ensure nested settings.local.json ---
 mkdir -p "$CLAUDE_DIR/.claude"
 if [ ! -f "$CLAUDE_DIR/.claude/settings.local.json" ]; then
   cat > "$CLAUDE_DIR/.claude/settings.local.json" << 'JSONEOF'
@@ -80,6 +94,19 @@ if [ ! -f "$CLAUDE_DIR/.claude/settings.local.json" ]; then
 }
 JSONEOF
   echo "[done] Created .claude/settings.local.json"
+fi
+
+# --- Step 6: Symlink review-guidelines.md ---
+if [ -L "$CLAUDE_DIR/review-guidelines.md" ]; then
+  echo "[skip] review-guidelines.md symlink already exists"
+elif [ -f "$CLAUDE_DIR/review-guidelines.md" ]; then
+  echo "[warn] review-guidelines.md is a real file, replacing with symlink"
+  rm -f "$CLAUDE_DIR/review-guidelines.md"
+  ln -s "$REPO_DIR/review-guidelines.md" "$CLAUDE_DIR/review-guidelines.md"
+  echo "[done] Created review-guidelines.md symlink"
+else
+  ln -s "$REPO_DIR/review-guidelines.md" "$CLAUDE_DIR/review-guidelines.md"
+  echo "[done] Created review-guidelines.md symlink"
 fi
 
 echo ""

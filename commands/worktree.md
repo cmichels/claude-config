@@ -11,25 +11,26 @@ You are setting up a fully-configured git worktree for Jira ticket implementatio
 
 ## Step 1: Detect Repository Context
 
-### 1.1 Validate Git Repository
+### 1.1 Validate Git Repository and Detect Repo Info
+
+Run the pre-built repo-info script (auto-approved via bin/ permission):
 
 ```bash
-git rev-parse --is-inside-work-tree 2>/dev/null
+/home/kuda/.claude/bin/repo-info.sh
 ```
 
-**If not a git repo:** STOP and inform user: "Not inside a git repository. Please navigate to the project you want to create a worktree from."
-
-### 1.2 Detect Repo Name and Parent Directory
-
-```bash
-# Get the repo root directory name (this becomes the project prefix)
-basename "$(git rev-parse --show-toplevel)"
-
-# Get the parent directory (where the worktree will be created)
-dirname "$(git rev-parse --show-toplevel)"
+This outputs key-value pairs:
+```
+is_git_repo: true
+repo_name: alarm-service
+parent_dir: /home/kuda/projects/tsp
+toplevel: /home/kuda/projects/tsp/alarm-service
+branch: dev
 ```
 
-Store as `$REPO_NAME` and `$PARENT_DIR`.
+**If `is_git_repo: false` or exit code 1:** STOP and inform user: "Not inside a git repository. Please navigate to the project you want to create a worktree from."
+
+Parse the output and store as `$REPO_NAME`, `$PARENT_DIR`, `$TOPLEVEL`, and `$BRANCH`.
 
 **Example:** If in `/Volumes/data/projects/tsp/alarm-service`, then:
 - `$REPO_NAME = "alarm-service"`
@@ -206,12 +207,7 @@ git worktree add "$WORKTREE_PATH" "$BRANCH_NAME"
 
 ### 4.1 Detect Config Files in Source Repo
 
-Get the source repo root:
-```bash
-git rev-parse --show-toplevel
-```
-
-Store as `$SOURCE_ROOT`.
+Use `$TOPLEVEL` from Step 1.1 as `$SOURCE_ROOT`.
 
 Scan for these config files/directories in the source repo. **Only copy what exists:**
 
@@ -285,11 +281,13 @@ Based on the Jira ticket description and summary, analyze the worktree codebase 
 - Test files that exist for the affected modules
 - Any relevant interfaces, types, or models
 
-Use `Glob`, `Grep`, and `Read` tools to explore the codebase. Focus on:
-1. The ticket description keywords — search for relevant terms in the code
-2. Package structure — understand the project layout
-3. Related tests — identify existing test patterns
-4. Configuration — any config files relevant to the feature/fix
+**IMPORTANT:** Use `Glob`, `Grep`, and `Read` tools exclusively for codebase exploration. Do NOT use Bash `find`, `grep`, `cat`, or piped shell commands — the dedicated tools are auto-approved and faster.
+
+Focus on:
+1. The ticket description keywords — use `Grep` to search for relevant terms in the code
+2. Package structure — use `Glob` with patterns like `**/*.ts`, `**/routes.*` to understand the project layout
+3. Related tests — use `Glob` with patterns like `**/*.spec.ts`, `**/*.test.ts` to identify existing test patterns
+4. Configuration — use `Glob` and `Read` for any config files relevant to the feature/fix
 
 ### 5.2 Check for Existing Plans
 
@@ -417,6 +415,61 @@ To start working:
 ```
 
 If there are open questions in the plan, highlight them and ask the user if they want to resolve them now before starting implementation.
+
+---
+
+## Step 8: Generate Starter Prompt
+
+After displaying the summary, synthesize a ready-to-paste prompt for the new Claude session the user will open in the worktree.
+
+### 8.1 Identify Insights Not Fully Captured in the Plan
+
+Review everything gathered during Steps 2 and 5 and identify 2–5 things worth surfacing to the new session that the plan does not deeply address. These are not problems with the plan — they are observations, risks, or open threads that are worth discussing before diving in. Examples:
+
+- A pattern in the codebase that conflicts with or complicates the planned approach
+- A dependency or shared component that the plan touches but doesn't explain (e.g., a base class, shared service, or model used by many widgets)
+- A security or data-integrity concern implied by the ticket that isn't called out
+- An alternative approach that was considered but not chosen — worth flagging so the new session can evaluate the tradeoff
+- A test gap: existing tests that will break or an area with no test coverage that the work will touch
+- A scope ambiguity in the Jira ticket or acceptance criteria that could lead to over- or under-building
+
+Keep each insight to one concise sentence. Only include ones that are genuinely informative — don't pad.
+
+### 8.2 Output the Starter Prompt
+
+Print the following block verbatim, with a clear "copy this" visual separator. Substitute all `$VARIABLES` with real values:
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  STARTER PROMPT — paste into new session
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+I'm working on $TICKET_ID: $JIRA_SUMMARY ($JIRA_TYPE).
+
+The implementation plan is at: plans/$TICKET_ID.md
+Worktree: $WORKTREE_PATH
+
+Before we start — a few things from the codebase analysis worth discussing:
+- <insight 1>
+- <insight 2>
+- <insight 3 if applicable>
+<open questions from the plan, formatted as: - Open question: <question text>>
+
+Let's walk through the plan iteratively and interactively. For each item provide:
+details, files to be changed, security concerns, design issues, refactoring
+opportunities, pros, cons, tradeoffs, off suggestions, and ask clarifying
+questions. I'll provide feedback and direction. After each item, update the
+plan and commit changes.
+
+Any questions?
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+**Notes for generating the starter prompt:**
+- If there are no open questions in the plan, omit the open-question lines entirely.
+- If there are no standout insights from analysis, use 1–2 generic but accurate observations rather than fabricating specifics (e.g., "The affected module has no existing unit tests — coverage will need to be added.").
+- The insights section is the high-value part of this prompt. Spend the most care here — this is what distinguishes a useful handoff from a generic one.
 
 ---
 
