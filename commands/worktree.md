@@ -63,10 +63,11 @@ $WORKTREE_PATH = "$PARENT_DIR/$REPO_NAME-$TICKET_ID"
 git worktree list
 ```
 
-Also check if the target directory already exists:
+Also check if the target directory already exists using the pre-built bin script (auto-approved):
 ```bash
-ls -d "$WORKTREE_PATH" 2>/dev/null
+/home/kuda/.claude/bin/worktree-exists.sh "$WORKTREE_PATH"
 ```
+Outputs `EXISTS` (exit 0) or `NOT_EXISTS` (exit 1).
 
 **If worktree or directory already exists:** Inform user and ask:
 - **Use existing** — cd into it and skip to Step 5 (codebase analysis)

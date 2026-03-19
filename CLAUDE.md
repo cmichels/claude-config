@@ -50,6 +50,9 @@
 - When using zsh, be aware that `?` and `*` are glob characters. Always quote URLs and API paths containing special characters. Prefer single quotes for URLs in curl/gh commands.
 - When using `rm` or `cp` commands, prefer `git rm` for tracked files and use `-f` flags proactively to avoid interactive confirmation prompts from shell aliases. Never assume `rm` or `cp` are unaliased.
 
+## Atlassian MCP
+- **Cloud ID:** `7d1d0780-63ed-4375-90d5-5424cc8695a3` (for `starktechgroup.atlassian.net`). Always use this UUID as the `cloudId` parameter — never use the site URL as the cloudId.
+
 ## Tool Reliability
 - When any MCP tool (especially Atlassian/Jira) hangs or becomes unresponsive for more than 30 seconds, immediately abandon it and fall back to CLI equivalents (`gh` for GitHub, `acli` for Jira). Do not retry the MCP tool more than once. Do not wait for user intervention.
 

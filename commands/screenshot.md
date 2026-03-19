@@ -44,17 +44,13 @@ Examples:
 
 ### 1.1 Look for Existing Session
 
-Search for `session.json` in this priority order:
-1. `$DIR/session.json` (if `--dir` was provided)
-2. `./session.json` (cwd)
-3. `./screenshots/session.json`
+Search for `session.json` in this priority order using the pre-built bin script (auto-approved):
 
 ```bash
-# Check each location
-for p in "${DIR:-.}/session.json" "./session.json" "./screenshots/session.json"; do
-  [ -f "$p" ] && echo "$p" && break
-done
+/home/kuda/.claude/bin/find-session.sh "$DIR"
 ```
+
+Omit the `$DIR` argument if `--dir` was not provided. The script checks `$DIR/session.json`, `./session.json`, and `./screenshots/session.json` in order. Outputs `FOUND: <path>` followed by the file contents, or `NO_SESSION` (exit 1) if none found.
 
 ### 1.2 If Session Found
 

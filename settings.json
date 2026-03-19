@@ -227,6 +227,24 @@
       "mcp__plugin_playwright_playwright__browser_wait_for",
       "mcp__plugin_playwright_playwright__browser_run_code",
       "mcp__plugin_playwright_playwright__browser_fill_form",
+      "mcp__plugin_playwright_playwright__browser_resize",
+      "mcp__plugin_playwright_playwright__browser_select_option",
+      "mcp__plugin_playwright_playwright__browser_hover",
+      "mcp__plugin_playwright_playwright__browser_drag",
+      "mcp__plugin_playwright_playwright__browser_scroll",
+      "mcp__plugin_playwright_playwright__browser_go_back",
+      "mcp__plugin_playwright_playwright__browser_go_forward",
+      "mcp__plugin_playwright_playwright__browser_tab_new",
+      "mcp__plugin_playwright_playwright__browser_tab_list",
+      "mcp__plugin_playwright_playwright__browser_tab_select",
+      "mcp__plugin_playwright_playwright__browser_tab_close",
+      "mcp__plugin_playwright_playwright__browser_close",
+      "mcp__plugin_playwright_playwright__browser_file_upload",
+      "mcp__plugin_playwright_playwright__browser_console_messages",
+      "mcp__plugin_playwright_playwright__browser_network_requests",
+      "mcp__plugin_playwright_playwright__browser_install",
+      "mcp__plugin_playwright_playwright__browser_generate_playwright_test",
+      "mcp__plugin_playwright_playwright__browser_pdf_save",
       "mcp__plugin_context7_context7__resolve-library-id",
       "mcp__plugin_context7_context7__query-docs"
     ],
@@ -235,6 +253,16 @@
   "model": "opus[1m]",
   "hooks": {
     "PreToolUse": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -z \"$CLAUDE_AUDIT_PERMISSIONS\" ] && exit 0; tool=\"$CLAUDE_TOOL_NAME\"; detail=$(echo \"$CLAUDE_TOOL_INPUT\" | jq -r '.command // .file_path // .skill // .query // .issueIdOrKey // \"—\"' 2>/dev/null); echo \"${tool}\t${detail}\" >> /tmp/claude-permission-audit.log; exit 0",
+            "statusMessage": "Auditing tool use"
+          }
+        ]
+      },
       {
         "matcher": "Skill",
         "hooks": [
