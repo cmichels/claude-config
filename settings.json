@@ -79,6 +79,8 @@
       "Bash(gh label list*)",
       "Bash(gh api repos/*/pulls/*/reviews*)",
       "Bash(gh api repos/*/pulls/*/comments*)",
+      "Bash(gh api repos/*/pulls/*/requested_reviewers*)",
+      "Bash(gh api user*)",
       "Bash(/home/kuda/.claude/bin/*)",
       "Bash(ls -d /home/kuda/projects/optelligent/*)",
       "Bash(mkdir /home/kuda/projects/optelligent/*)",
@@ -258,7 +260,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "[ -z \"$CLAUDE_AUDIT_PERMISSIONS\" ] && exit 0; tool=\"$CLAUDE_TOOL_NAME\"; detail=$(echo \"$CLAUDE_TOOL_INPUT\" | jq -r '.command // .file_path // .skill // .query // .issueIdOrKey // \"—\"' 2>/dev/null); echo \"${tool}\t${detail}\" >> /tmp/claude-permission-audit.log; exit 0",
+            "command": "[ ! -f /tmp/claude-audit-enabled ] && exit 0; tool=\"$CLAUDE_TOOL_NAME\"; detail=$(echo \"$CLAUDE_TOOL_INPUT\" | jq -r '.command // .file_path // .skill // .query // .issueIdOrKey // \"—\"' 2>/dev/null); echo \"${tool}\t${detail}\" >> /tmp/claude-permission-audit.log; exit 0",
             "statusMessage": "Auditing tool use"
           }
         ]
@@ -312,6 +314,11 @@
             "type": "command",
             "command": "filepath=\"$CLAUDE_FILE_PATH\"; case \"$filepath\" in *.ts|*.js|*.html|*.css|*.scss) dir=\"$filepath\"; while [ \"$dir\" != \"/\" ]; do dir=$(dirname \"$dir\"); if [ -f \"$dir/.eslintrc.json\" ] || [ -f \"$dir/.eslintrc.js\" ] || [ -f \"$dir/.eslintrc.yml\" ] || [ -f \"$dir/eslint.config.js\" ] || [ -f \"$dir/eslint.config.mjs\" ]; then cd \"$dir\" && npx eslint --fix \"$filepath\" 2>&1 | head -20 || true; break; fi; done ;; esac; exit 0",
             "statusMessage": "Linting web file"
+          },
+          {
+            "type": "command",
+            "command": "filepath=\"$CLAUDE_FILE_PATH\"; case \"$filepath\" in *.ts|*.tsx) dir=\"$filepath\"; while [ \"$dir\" != \"/\" ]; do dir=$(dirname \"$dir\"); if [ -f \"$dir/tsconfig.json\" ]; then cd \"$dir\" && npx tsc --noEmit 2>&1 | head -30 || true; break; fi; done ;; esac; exit 0",
+            "statusMessage": "Type-checking TypeScript"
           }
         ]
       }

@@ -34,6 +34,11 @@
 - Clipboard bridging (Windows ↔ tmux) configured via `win32yank`
 - The catppuccin theme plugin re-applies settings on every reload — manually unsetting options won't stick if catppuccin re-enables them. Always check for theme plugin overrides before iterating on tmux styling. Kill and restart the tmux server (`tmux kill-server`) to verify changes aren't being masked by cached state.
 
+## Config Editing
+- Before editing any config file, check if it's a symlink (`ls -la`). If it is, edit the source file in the dotfiles/config repo — not the symlink target. Changes to symlink targets get silently overwritten.
+- After modifying any config that requires a reload (tmux, shell, Ghostty), verify the change took effect. Don't assume — confirm. For tmux: `tmux show-option` or `tmux display-message`. For shell: `echo $VAR` or `set -o`. For Ghostty: visual check after `Ctrl+Shift+,`.
+- When editing configs managed by plugin systems (tmux/TPM, zsh/oh-my-zsh, nvim/lazy), check if the plugin re-applies defaults that override your change. Test by reloading, not just saving.
+
 ## Git
 - All commits MUST be GPG-signed. Never attempt unsigned commits (`--no-gpg-sign`, `-c commit.gpgsign=false`). If GPG signing fails, diagnose the root cause: check `gpg-agent` is running, `pinentry-mode loopback` is set in `~/.gnupg/gpg.conf`, and the passphrase cache is warm. Do NOT bypass signing.
 - Use `git worktree add` (not regular branch creation) for Jira ticket implementation workflows. Always create worktrees in the correct volume/path as specified by the user. When copying config/dotfiles into worktrees, use `command cp` to bypass any shell alias that adds `-i` interactive confirmation. Copy `.claude/settings.json` and any needed config files into new worktrees.
@@ -53,11 +58,20 @@
 ## Atlassian MCP
 - **Cloud ID:** `7d1d0780-63ed-4375-90d5-5424cc8695a3` (for `starktechgroup.atlassian.net`). Always use this UUID as the `cloudId` parameter — never use the site URL as the cloudId.
 
+## GitHub
+- **Username:** `starkmichelsc`. Use this directly — never call `gh api user` to look it up.
+
 ## Tool Reliability
 - When any MCP tool (especially Atlassian/Jira) hangs or becomes unresponsive for more than 30 seconds, immediately abandon it and fall back to CLI equivalents (`gh` for GitHub, `acli` for Jira). Do not retry the MCP tool more than once. Do not wait for user intervention.
 
 ## Implementation Approach
 - Before implementing non-trivial changes (multi-file edits, refactors, bug fixes), briefly outline your approach in 3-5 bullet points and wait for confirmation. Include: which files you'll modify, what the key changes are, and any assumptions. Skip this for single-file edits or changes explicitly described by the user.
+
+## Scope Discipline
+- Do exactly what was asked. Not what "might also be useful." Not what "would be better while we're in here." The thing. Only the thing.
+- Before starting work on config, environment, or platform tasks: validate that the intended approach will actually work in this environment (WSL2, symlinks, shell aliases). Spend 30 seconds checking feasibility before spending 10 minutes on a dead end.
+- If the first approach fails, STOP. Do not silently pivot to a different strategy. State what failed, why, and propose the alternative. Let the user decide.
+- Never broaden scope mid-task. If you discover something adjacent that needs fixing, mention it — don't fix it. Finish the original ask first.
 
 ## Code Review
 - When posting PR reviews via MCP orchestrator/subtask, if the subtask fails to post, fall back immediately to direct `gh api` or `gh pr review` CLI commands — do not retry the MCP approach.

@@ -20,6 +20,7 @@ Parse `$ARGUMENTS` into:
 - `--depth` — optional time window for reading messages (default: `1h`). Accepts: `30m`, `1h`, `2h`, `4h`, `1d`. Applies to `read` and `reply` modes.
 - `--no-identify` — optional, skip Claude self-identification on first message to someone new
 - `--auto` — optional, skip approval confirmation and send immediately. Applies to `send` and `reply` modes. **Use with care** — messages are sent without preview. Claude still logs what was sent in the output.
+- `--filter` — optional, case-insensitive substring match to filter monitor results. Applies to `monitor` mode only. Matches against chat/group chat names. Multiple filters can be comma-separated.
 
 **If no mode or invalid mode:** Show usage and STOP:
 ```
@@ -36,6 +37,7 @@ Options:
                       Values: 30m, 1h, 2h, 4h, 1d
   --no-identify       Skip Claude self-identification
   --auto              Skip send confirmation (send and reply modes)
+  --filter <text>     Filter monitor results by name (case-insensitive, comma-separated)
 
 Examples:
   /teams-chat send "James Wilson" hey, standup in 5?
@@ -43,9 +45,11 @@ Examples:
   /teams-chat reply "James Wilson"
   /teams-chat reply "James Wilson" --auto
   /teams-chat monitor
+  /teams-chat monitor --filter "PR"
+  /teams-chat monitor --filter "PR Channel,PR Discussion"
 
 Polling (pair with /loop):
-  /loop 15m /teams-chat monitor
+  /loop 15m /teams-chat monitor --filter "PR"
 ```
 
 ---
@@ -502,35 +506,51 @@ async (page) => {
 }
 ```
 
-### 6.2 Output
+### 6.2 Apply Filter
+
+**If `--filter` is set:** Parse comma-separated filter terms and keep only chats whose name matches any term (case-insensitive substring match).
+
+```
+$FILTERS = --filter value split by "," and trimmed
+$FILTERED_CHATS = chats where name contains ANY of $FILTERS (case-insensitive)
+```
+
+**Examples:**
+- `--filter "PR"` matches "THE PR Channel", "THE PR Discussion", "PR Reviews"
+- `--filter "PR Channel,PR Discussion"` matches those two specifically
+- No `--filter` → show all chats (existing behavior)
+
+### 6.3 Output
 
 **If unreads found:**
 ```
-Teams Monitor — $TIMESTAMP
+Teams Monitor — $TIMESTAMP $FILTER_LABEL
 
 Unread:
-  - James Wilson (2 min ago): "hey did you see the PR?"
-  - Sarah Chen (15 min ago): "meeting moved to 3pm"
+  - THE PR Channel
+  - THE PR Discussion
 
 Recent (read):
-  - Mike Torres (1h ago): "thanks, that worked"
-  - DevOps Bot (2h ago): "deploy successful"
+  - Casey and Nicholas
 
-$UNREAD_COUNT unread | $TOTAL chats scanned
+$UNREAD_COUNT unread | $TOTAL chats scanned $FILTER_NOTE
 ```
+
+Where `$FILTER_LABEL` is `(filter: "PR")` if `--filter` is set, empty otherwise.
+Where `$FILTER_NOTE` is `(filtered from N total)` if `--filter` is set, empty otherwise.
 
 **If no unreads:**
 ```
-Teams Monitor — $TIMESTAMP
+Teams Monitor — $TIMESTAMP $FILTER_LABEL
 
 No unread messages. $TOTAL chats scanned.
 ```
 
-### 6.3 Polling
+### 6.4 Polling
 
 This mode pairs with `/loop` for recurring monitoring:
 ```
-/loop 15m /teams-chat monitor
+/loop 15m /teams-chat monitor --filter "PR"
 ```
 
 Recommended intervals:
