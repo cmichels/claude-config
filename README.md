@@ -27,7 +27,7 @@ The setup script will:
 |---|---|
 | `CLAUDE.md` | Global instructions (personality, workflow, git conventions) |
 | `settings.json` | Permissions, hooks, plugins, status line |
-| `commands/` | Custom slash commands (/worktree, /ship-it, /review-pr, etc.) |
+| `commands/` | Custom slash commands (/worktree, /ship-it, /review-pr-team, etc.) |
 | `agents/` | Custom agent definitions (golang-expert, pr-review suite) |
 | `hooks/` | Hook examples |
 | `memories/` | Portable project memory (path-remappable) |

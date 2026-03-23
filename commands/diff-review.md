@@ -13,15 +13,23 @@ Fast, single-pass review of current changes. No agents, no file output, no cerem
 
 **If `$ARGUMENTS` is empty:** Review working tree changes (staged + unstaged):
 ```bash
+git diff --stat HEAD
 git diff HEAD
 ```
 
 If that's empty, check for staged-only changes:
 ```bash
+git diff --stat --cached
 git diff --cached
 ```
 
 If both are empty: "Nothing to review. Working tree is clean." STOP.
+
+Also check for untracked files:
+```bash
+git ls-files --others --exclude-standard
+```
+If untracked files exist, note them at the start of your review: "N untracked files not in the diff — `git add` them first if you want them reviewed." List the filenames but don't review their contents.
 
 **If `$ARGUMENTS` is a branch name:** Review all changes on the current branch since diverging:
 ```bash
@@ -35,15 +43,13 @@ git diff --stat $ARGUMENTS...HEAD
 
 Store the diff as `$DIFF` and the changed file list as `$FILES`.
 
-## Step 2: Read Changed Files
+## Step 2: Read Context (On Demand)
 
-For each file in `$FILES` that is not deleted and not binary:
-- Read the full current content using the Read tool
-- This provides surrounding context that the diff alone may lack
+The diff is your primary input. Do NOT pre-read every changed file.
 
-Skip files over 500 lines — for those, rely on the diff only.
+Only use the Read tool when a diff hunk is ambiguous — e.g., a changed line references a variable, function, or type defined elsewhere in the file and you can't assess correctness from the diff alone. Read the minimum needed (specific line ranges, not full files).
 
-Cap at 15 files. If more than 15 files changed, note it and focus on the largest diffs first.
+If more than 15 files changed, note it and focus on the largest diffs first.
 
 ## Step 3: Review
 

@@ -46,6 +46,9 @@ reviews/
 # Nested .claude internal state
 .claude/
 
+# Playwright MCP state
+.playwright-mcp/
+
 # OS junk
 .DS_Store
 ._*
