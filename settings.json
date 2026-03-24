@@ -238,6 +238,8 @@
       "mcp__plugin_atlassian_atlassian__getJiraProjectIssueTypesMetadata",
       "mcp__plugin_atlassian_atlassian__editJiraIssue",
       "mcp__plugin_atlassian_atlassian__transitionJiraIssue",
+      "mcp__plugin_atlassian_atlassian__getTransitionsForJiraIssue",
+      "mcp__plugin_atlassian_atlassian__lookupJiraAccountId",
       "mcp__plugin_playwright_playwright__browser_navigate",
       "mcp__plugin_playwright_playwright__browser_snapshot",
       "mcp__plugin_playwright_playwright__browser_click",

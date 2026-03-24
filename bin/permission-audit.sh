@@ -50,8 +50,8 @@ echo ""
 echo "--- TOOL USAGE SUMMARY ---"
 echo ""
 
-# Extract tool names and count occurrences
-awk -F'\t' '{print $1}' "$LOGFILE" | sort | uniq -c | sort -rn | while read -r count name; do
+# Extract tool names and count occurrences (skip empty names)
+awk -F'\t' '$1 != "" {print $1}' "$LOGFILE" | sort | uniq -c | sort -rn | while read -r count name; do
   printf "  %4d  %s\n" "$count" "$name"
 done
 echo ""
@@ -61,8 +61,6 @@ echo "--- BASH COMMANDS USED ---"
 echo ""
 
 grep '^Bash' "$LOGFILE" | awk -F'\t' '{print $2}' | sort -u | while read -r cmd; do
-  # Extract the first two words to suggest a pattern
-  prefix=$(echo "$cmd" | awk '{print $1, $2}')
   echo "  $cmd"
 done
 echo ""
@@ -71,7 +69,7 @@ echo ""
 echo "--- NON-BASH TOOLS USED ---"
 echo ""
 
-grep -v '^Bash' "$LOGFILE" | awk -F'\t' '{print $1}' | sort -u | while read -r tool; do
+grep -v '^Bash' "$LOGFILE" | awk -F'\t' '$1 != "" {print $1}' | sort -u | while read -r tool; do
   echo "  $tool"
 done
 echo ""
@@ -97,7 +95,7 @@ bash_patterns=$(grep '^Bash' "$LOGFILE" | awk -F'\t' '{print $2}' | \
     }
   }' | sort -u)
 
-non_bash=$(grep -v '^Bash' "$LOGFILE" | awk -F'\t' '{print $1}' | sort -u)
+non_bash=$(grep -v '^Bash' "$LOGFILE" | awk -F'\t' '$1 != "" {print $1}' | sort -u)
 
 echo "# Paste into your launcher script's --allowedTools:"
 echo "claude --allowedTools \\"
@@ -150,6 +148,11 @@ if [ -f "$SETTINGS" ]; then
 
   # Check bash patterns
   grep '^Bash' "$LOGFILE" | awk -F'\t' '{print $2}' | sort -u | while read -r cmd; do
+    # Strip leading/trailing quotes that Claude Code may wrap around arguments
+    normalized="${cmd#\"}"
+    normalized="${normalized%\"}"
+    normalized="${normalized#\'}"
+    normalized="${normalized%\'}"
     covered=false
     while IFS= read -r rule; do
       case "$rule" in
@@ -158,7 +161,7 @@ if [ -f "$SETTINGS" ]; then
           pattern="${rule#Bash(}"
           pattern="${pattern%)}"
           pattern_prefix="${pattern%\*}"
-          if [[ "$cmd" == "$pattern_prefix"* ]]; then
+          if [[ "$normalized" == "$pattern_prefix"* ]] || [[ "$cmd" == "$pattern_prefix"* ]]; then
             covered=true
             break
           fi
