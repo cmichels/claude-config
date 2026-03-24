@@ -1,13 +1,37 @@
 ---
-description: "Collaborative PR review using an agent team. Usage: /review-pr-team <PR_NUMBER>. Spawns 4 reviewer teammates in tmux panes — security+errors, code quality, architecture, coverage+style — that review in parallel, discuss findings with each other, then the lead synthesizes and posts to GitHub."
+description: "Collaborative PR review using an agent team. Usage: /review-pr-team <PR_NUMBER> [--model sonnet|opus|haiku]. Spawns 4 reviewer teammates — security+errors, code quality, architecture, coverage+style — that review in parallel, discuss findings with each other, then the lead synthesizes and posts to GitHub."
 allowed_tools: Read, Glob, Grep, Bash, TeamCreate, TeamDelete, TaskCreate, TaskList, TaskGet, TaskUpdate, TaskOutput, TaskStop, SendMessage, AskUserQuestion, WebFetch, mcp__github-cli__get_pull_request, mcp__github-cli__get_pull_request_files, mcp__github-cli__get_pull_request_status, mcp__github-cli__get_pull_request_reviews, mcp__github-cli__get_pull_request_comments, mcp__github-cli__get_file_contents, mcp__github-cli__create_pull_request_review, mcp__plugin_atlassian_atlassian__getJiraIssue, mcp__plugin_atlassian_atlassian__searchJiraIssuesUsingJql
 ---
 
 # PR Review Team Command
 
-You are the **team lead** orchestrating a collaborative pull request review using an agent team. The PR number is: **$ARGUMENTS**
+You are the **team lead** orchestrating a collaborative pull request review using an agent team.
 
-Each reviewer runs as an independent teammate in its own tmux pane. After completing their initial review, teammates share findings with each other and can directly challenge or corroborate each other's conclusions before you synthesize the final verdict.
+---
+
+## Step 0: Parse Arguments
+
+Parse `$ARGUMENTS` to extract the PR number and optional flags:
+
+- **Required**: PR number (first positional argument, numeric)
+- **Optional**: `--model <sonnet|opus|haiku>` — override the model used for reviewer teammates
+
+**Examples:**
+- `/review-pr-team 123` → PR #123, reviewers on default model
+- `/review-pr-team 123 --model opus` → PR #123, all reviewers on Opus
+
+Store as `$PR_NUMBER` and `$REVIEWER_MODEL`.
+
+### Model Defaults
+
+| Role | Default model | Rationale |
+|------|--------------|-----------|
+| Lead (you) | Session model (no override) | Synthesis and orchestration benefits from the session's full capability |
+| Reviewer teammates | **sonnet** | Focused domain reviews with structured output — Sonnet is capable and cost-efficient |
+
+If `--model` is provided, use that value for all reviewer teammates instead of the default.
+
+Store the resolved model as `$REVIEWER_MODEL` (default: `"sonnet"`).
 
 ---
 
@@ -193,6 +217,8 @@ Assemble the data package for the review team:
 ## Step 6: Create the PR Review Team
 
 Create an agent team named `pr-review-<PR_NUMBER>` with 4 specialized reviewer teammates. Each teammate receives the full context JSON compiled in Step 5 in their spawn prompt — they do not inherit your conversation history.
+
+**Model configuration:** When spawning each reviewer teammate via the Agent tool, set `model: $REVIEWER_MODEL` (resolved in Step 0, default: `"sonnet"`). The lead (you) stays on your session's model — do not override your own model.
 
 Spawn the team with this structure and task list:
 
@@ -643,7 +669,7 @@ If any Atlassian MCP call fails (`mcp__plugin_atlassian_*`):
 
 **Verdict**: APPROVED / CHANGES REQUESTED / COMMENTED
 **Posted to GitHub**: Yes (MCP) | Yes (CLI fallback) | Skipped (user choice) | Failed
-**Review method**: Agent team (4 reviewers + lead)
+**Review method**: Agent team (4 reviewers on $REVIEWER_MODEL + lead)
 
 ### Files Changed (<n> files)
 - [A] path/to/new-file.ts — <brief description>

@@ -259,6 +259,8 @@ git diff --cached
 
 Read the content of key changed files to understand the nature of the changes.
 
+**Tool rules for code analysis:** Use `Read`, `Glob`, and `Grep` tools for examining file contents, finding files, and searching code. NEVER use Bash commands like `cat`, `grep`, `find`, `head`, `cd && ...`, or piped shell commands for codebase exploration — these trigger permission prompts. The dedicated tools are auto-approved.
+
 ### 5.2 Generate Commit Message
 
 **Auto-generate** a commit message based on:
@@ -469,12 +471,12 @@ gh pr edit $PR_NUMBER --add-label "dependencies" --repo "$OWNER/$REPO"
 
 ### 6.7 Set Assignee
 
-Auto-detect the current GitHub user:
-```bash
-gh api user --jq '.login'
+Use the known GitHub username (do NOT call `gh api user`):
+```
+$GH_USER = "starkmichelsc"
 ```
 
-Store as `$GH_USER`, then assign:
+Assign:
 ```bash
 gh pr edit $PR_NUMBER --add-assignee "$GH_USER" --repo "$OWNER/$REPO"
 ```

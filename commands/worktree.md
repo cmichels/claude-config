@@ -210,7 +210,13 @@ git worktree add "$WORKTREE_PATH" "$BRANCH_NAME"
 
 Use `$TOPLEVEL` from Step 1.1 as `$SOURCE_ROOT`.
 
-Scan for these config files/directories in the source repo. **Only copy what exists:**
+Run the pre-built config checker script (auto-approved via bin/ permission):
+
+```bash
+/home/kuda/.claude/bin/worktree-check-configs.sh "$SOURCE_ROOT" "$WORKTREE_PATH"
+```
+
+This outputs which files exist. **Only copy what exists:**
 
 | Priority | Path | Description |
 |----------|------|-------------|
@@ -226,46 +232,30 @@ Scan for these config files/directories in the source repo. **Only copy what exi
 
 ### 4.2 Copy Files
 
-**IMPORTANT:** Use `command cp` to bypass shell aliases that add `-i` (interactive confirmation).
+Run the same script with `--copy` to detect and copy in one pass (auto-approved via bin/ permission):
 
-For directories:
 ```bash
-command cp -r "$SOURCE_ROOT/.claude" "$WORKTREE_PATH/.claude"
+/home/kuda/.claude/bin/worktree-check-configs.sh "$SOURCE_ROOT" "$WORKTREE_PATH" --copy
 ```
 
-For files:
-```bash
-command cp "$SOURCE_ROOT/.env" "$WORKTREE_PATH/.env"
-```
-
-For nested gitignored directories (e.g., Angular environments):
-```bash
-mkdir -p "$WORKTREE_PATH/ClientApp/src/environments"
-command cp "$SOURCE_ROOT/ClientApp/src/environments/"*.ts "$WORKTREE_PATH/ClientApp/src/environments/"
-```
-
-Only copy files that exist. Do not error on missing optional files.
-
-### 4.3 Report What Was Copied
-
-List all files/directories that were successfully copied so the user knows what's in the worktree.
+This uses `command cp` internally to bypass shell aliases. It only copies files/directories that exist and reports what was copied.
 
 ### 4.4 Write .jira-context File
 
-Write a JSON context file to the worktree root so other tools (Claude Code status line, shell functions) can display ticket context:
+Use the **Write tool** (NOT Bash heredoc/cat) to create a JSON context file at `$WORKTREE_PATH/.jira-context`. This is auto-approved via Write permissions.
 
-```bash
-cat > "$WORKTREE_PATH/.jira-context" << 'CTXEOF'
+Contents (replace variables with actual values, ensure valid JSON — escape any quotes in the summary):
+
+```json
 {
   "key": "$TICKET_ID",
   "type": "$JIRA_TYPE",
   "priority": "$JIRA_PRIORITY",
   "summary": "$JIRA_SUMMARY"
 }
-CTXEOF
 ```
 
-Replace the `$VARIABLES` with actual values. Ensure valid JSON (escape any quotes in the summary).
+**NEVER use `cat >` or Bash heredocs for this** — it triggers security warnings. The Write tool is pre-approved and silent.
 
 **If the write fails:** Log a warning but do not abort — this file is informational, not critical.
 
@@ -282,13 +272,23 @@ Based on the Jira ticket description and summary, analyze the worktree codebase 
 - Test files that exist for the affected modules
 - Any relevant interfaces, types, or models
 
-**IMPORTANT:** Use `Glob`, `Grep`, and `Read` tools exclusively for codebase exploration. Do NOT use Bash `find`, `grep`, `cat`, or piped shell commands — the dedicated tools are auto-approved and faster.
+### ⛔ TOOL RULES FOR STEP 5 — READ BEFORE PROCEEDING
+
+| Task | CORRECT tool | FORBIDDEN (triggers permission prompts) |
+|------|-------------|----------------------------------------|
+| Find files by pattern | `Glob` (`**/*.scss`, `**/routes.*`) | `find`, `ls`, `tree` |
+| Search file contents | `Grep` (supports regex, glob filters) | `grep`, `rg`, `ack`, `xargs grep` |
+| Read file contents | `Read` | `cat`, `head`, `tail`, `less` |
+| Any combination | Use multiple tool calls in parallel | Piped shell commands (`find | xargs`, `grep -r | head`) |
+
+**There are ZERO exceptions. Every Bash call in Step 5 is a bug.**
 
 Focus on:
 1. The ticket description keywords — use `Grep` to search for relevant terms in the code
 2. Package structure — use `Glob` with patterns like `**/*.ts`, `**/routes.*` to understand the project layout
 3. Related tests — use `Glob` with patterns like `**/*.spec.ts`, `**/*.test.ts` to identify existing test patterns
-4. Configuration — use `Glob` and `Read` for any config files relevant to the feature/fix
+4. Search for CSS/style patterns — use `Grep` with regex and glob filters (e.g., `pattern: "\.card|card-block"`, `glob: "*.scss"`)
+5. Configuration — use `Glob` and `Read` for any config files relevant to the feature/fix
 
 ### 5.2 Check for Existing Plans
 
