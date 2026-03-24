@@ -8,6 +8,8 @@
       "Read",
       "Glob",
       "Grep",
+      "Write(/home/kuda/projects/optelligent/*/.jira-context)",
+      "Write(../*/.jira-context)",
       "Bash(cat*)",
       "Bash(head*)",
       "Bash(tail*)",
@@ -45,6 +47,15 @@
       "Bash(go vet*)",
       "Bash(go test*)",
       "Bash(git fetch*)",
+      "Bash(git -C * fetch*)",
+      "Bash(git -C * add *)",
+      "Bash(git -C * status*)",
+      "Bash(git -C * log*)",
+      "Bash(git -C * diff*)",
+      "Bash(git -C * branch*)",
+      "Bash(git -C * rev-parse*)",
+      "Bash(git checkout HEAD -- *)",
+      "Bash(git -C * worktree*)",
       "Bash(git rev-parse*)",
       "Bash(git status*)",
       "Bash(git log*)",
@@ -57,6 +68,7 @@
       "Bash(git ls-files*)",
       "Bash(git blame*)",
       "Bash(git worktree list*)",
+      "Bash(git worktree add *)",
       "Bash(git config --get*)",
       "Bash(git grep*)",
       "Bash(git describe*)",
@@ -85,6 +97,11 @@
       "Bash(ls -d /home/kuda/projects/optelligent/*)",
       "Bash(mkdir /home/kuda/projects/optelligent/*)",
       "Bash(mkdir -p /home/kuda/projects/optelligent/*)",
+      "Bash(command cp /home/kuda/projects/optelligent/*)",
+      "Bash(command cp -r /home/kuda/projects/optelligent/*)",
+      "Bash(mkdir -p ./plans/screenshots*)",
+      "Bash(ls ./plans/screenshots*)",
+      "Bash(python3 ./plans/screenshots/annotate.py*)",
       "Bash(grep*)",
       "Bash(awk*)",
       "Bash(sort*)",
@@ -219,6 +236,8 @@
       "mcp__plugin_atlassian_atlassian__getVisibleJiraProjects",
       "mcp__plugin_atlassian_atlassian__getAccessibleAtlassianResources",
       "mcp__plugin_atlassian_atlassian__getJiraProjectIssueTypesMetadata",
+      "mcp__plugin_atlassian_atlassian__editJiraIssue",
+      "mcp__plugin_atlassian_atlassian__transitionJiraIssue",
       "mcp__plugin_playwright_playwright__browser_navigate",
       "mcp__plugin_playwright_playwright__browser_snapshot",
       "mcp__plugin_playwright_playwright__browser_click",
@@ -260,7 +279,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "[ ! -f /tmp/claude-audit-enabled ] && exit 0; tool=\"$CLAUDE_TOOL_NAME\"; detail=$(echo \"$CLAUDE_TOOL_INPUT\" | jq -r '.command // .file_path // .skill // .query // .issueIdOrKey // \"—\"' 2>/dev/null); echo \"${tool}\t${detail}\" >> /tmp/claude-permission-audit.log; exit 0",
+            "command": "[ ! -f /tmp/claude-audit-enabled ] && exit 0; input=$(cat); tool=$(echo \"$input\" | jq -r '.tool_name'); detail=$(echo \"$input\" | jq -r '.tool_input | (.command // .file_path // .skill // .query // .issueIdOrKey // \"—\")' 2>/dev/null); echo \"${tool}\t${detail}\" >> /tmp/claude-permission-audit.log; exit 0",
             "statusMessage": "Auditing tool use"
           }
         ]
@@ -270,7 +289,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if echo \"$CLAUDE_TOOL_INPUT\" | grep -qi 'insights'; then report=\"$HOME/.claude/usage-data/report.html\"; if [ -f \"$report\" ]; then d=$(stat -c '%y' \"$report\" | cut -d' ' -f1); dest=\"$HOME/.claude/usage-data/report-${d}.html\"; [ ! -f \"$dest\" ] && command cp \"$report\" \"$dest\"; fi; fi; exit 0",
+            "command": "input=$(cat); if echo \"$input\" | jq -r '.tool_input.skill // .tool_input // \"\"' | grep -qi 'insights'; then report=\"$HOME/.claude/usage-data/report.html\"; if [ -f \"$report\" ]; then d=$(stat -c '%y' \"$report\" | cut -d' ' -f1); dest=\"$HOME/.claude/usage-data/report-${d}.html\"; [ ! -f \"$dest\" ] && command cp \"$report\" \"$dest\"; fi; fi; exit 0",
             "statusMessage": "Archiving previous insights report"
           }
         ]
@@ -280,7 +299,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if echo \"$CLAUDE_TOOL_INPUT\" | grep -qE 'git (commit|push)'; then branch=$(git branch --show-current 2>/dev/null); if [ -n \"$branch\" ]; then case \"$branch\" in feature/*|bug/*|bugfix/*|dev|main|master) exit 0 ;; *) echo \"Branch '$branch' does not follow naming convention (feature/*, bug/*, bugfix/*). Create a properly named branch first.\" >&2; exit 2 ;; esac; fi; fi; exit 0",
+            "command": "input=$(cat); cmd=$(echo \"$input\" | jq -r '.tool_input.command // \"\"'); if echo \"$cmd\" | grep -qE 'git (commit|push)'; then branch=$(git branch --show-current 2>/dev/null); if [ -n \"$branch\" ]; then case \"$branch\" in feature/*|bug/*|bugfix/*|dev|main|master) exit 0 ;; *) echo \"Branch '$branch' does not follow naming convention (feature/*, bug/*, bugfix/*). Create a properly named branch first.\" >&2; exit 2 ;; esac; fi; fi; exit 0",
             "statusMessage": "Validating branch naming convention"
           }
         ]
@@ -292,7 +311,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if echo \"$CLAUDE_TOOL_INPUT\" | grep -qE 'git commit'; then sig=$(git log -1 --show-signature 2>&1); if echo \"$sig\" | grep -q 'Good signature'; then echo 'GPG signature verified.'; else echo 'WARNING: Last commit may not be GPG-signed. Run ~/bin/claude-preflight.sh to diagnose.' >&2; fi; fi; exit 0",
+            "command": "input=$(cat); cmd=$(echo \"$input\" | jq -r '.tool_input.command // \"\"'); if echo \"$cmd\" | grep -qE 'git commit'; then sig=$(git log -1 --show-signature 2>&1); if echo \"$sig\" | grep -q 'Good signature'; then echo 'GPG signature verified.'; else echo 'WARNING: Last commit may not be GPG-signed. Run ~/bin/claude-preflight.sh to diagnose.' >&2; fi; fi; exit 0",
             "statusMessage": "Verifying GPG commit signature"
           }
         ]
@@ -302,22 +321,22 @@
         "hooks": [
           {
             "type": "command",
-            "command": "filepath=\"$CLAUDE_FILE_PATH\"; case \"$filepath\" in *.go) gofmt -w \"$filepath\" 2>/dev/null; dir=$(dirname \"$filepath\"); go vet \"$dir/...\" 2>&1 | head -20 || true ;; esac; exit 0",
+            "command": "input=$(cat); filepath=$(echo \"$input\" | jq -r '.tool_input.file_path // \"\"'); case \"$filepath\" in *.go) gofmt -w \"$filepath\" 2>/dev/null; dir=$(dirname \"$filepath\"); go vet \"$dir/...\" 2>&1 | head -20 || true ;; esac; exit 0",
             "statusMessage": "Formatting and vetting Go file"
           },
           {
             "type": "command",
-            "command": "filepath=\"$CLAUDE_FILE_PATH\"; case \"$filepath\" in go.mod) dir=$(dirname \"$filepath\"); cd \"$dir\" && go mod tidy 2>/dev/null || true ;; esac; exit 0",
+            "command": "input=$(cat); filepath=$(echo \"$input\" | jq -r '.tool_input.file_path // \"\"'); case \"$filepath\" in go.mod) dir=$(dirname \"$filepath\"); cd \"$dir\" && go mod tidy 2>/dev/null || true ;; esac; exit 0",
             "statusMessage": "Tidying go.mod"
           },
           {
             "type": "command",
-            "command": "filepath=\"$CLAUDE_FILE_PATH\"; case \"$filepath\" in *.ts|*.js|*.html|*.css|*.scss) dir=\"$filepath\"; while [ \"$dir\" != \"/\" ]; do dir=$(dirname \"$dir\"); if [ -f \"$dir/.eslintrc.json\" ] || [ -f \"$dir/.eslintrc.js\" ] || [ -f \"$dir/.eslintrc.yml\" ] || [ -f \"$dir/eslint.config.js\" ] || [ -f \"$dir/eslint.config.mjs\" ]; then cd \"$dir\" && npx eslint --fix \"$filepath\" 2>&1 | head -20 || true; break; fi; done ;; esac; exit 0",
+            "command": "input=$(cat); filepath=$(echo \"$input\" | jq -r '.tool_input.file_path // \"\"'); case \"$filepath\" in *.ts|*.js|*.html|*.css|*.scss) dir=\"$filepath\"; while [ \"$dir\" != \"/\" ]; do dir=$(dirname \"$dir\"); if [ -f \"$dir/.eslintrc.json\" ] || [ -f \"$dir/.eslintrc.js\" ] || [ -f \"$dir/.eslintrc.yml\" ] || [ -f \"$dir/eslint.config.js\" ] || [ -f \"$dir/eslint.config.mjs\" ]; then cd \"$dir\" && npx eslint --fix \"$filepath\" 2>&1 | head -20 || true; break; fi; done ;; esac; exit 0",
             "statusMessage": "Linting web file"
           },
           {
             "type": "command",
-            "command": "filepath=\"$CLAUDE_FILE_PATH\"; case \"$filepath\" in *.ts|*.tsx) dir=\"$filepath\"; while [ \"$dir\" != \"/\" ]; do dir=$(dirname \"$dir\"); if [ -f \"$dir/tsconfig.json\" ]; then cd \"$dir\" && npx tsc --noEmit 2>&1 | head -30 || true; break; fi; done ;; esac; exit 0",
+            "command": "input=$(cat); filepath=$(echo \"$input\" | jq -r '.tool_input.file_path // \"\"'); case \"$filepath\" in *.ts|*.tsx) dir=\"$filepath\"; while [ \"$dir\" != \"/\" ]; do dir=$(dirname \"$dir\"); if [ -f \"$dir/tsconfig.json\" ]; then cd \"$dir\" && npx tsc --noEmit 2>&1 | head -30 || true; break; fi; done ;; esac; exit 0",
             "statusMessage": "Type-checking TypeScript"
           }
         ]
