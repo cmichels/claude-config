@@ -11,6 +11,26 @@ CYAN=$'\033[36m'
 DIM=$'\033[2m'
 RESET=$'\033[0m'
 
+# --- Rainbow ---
+# Strips existing ANSI colors and re-applies a per-character rainbow gradient
+rainbow_text() {
+  local plain
+  plain=$(printf '%s' "$1" | sed $'s/\033\[[0-9;]*m//g')
+  local -a colors=(196 208 220 46 51 39 105 165)
+  local out="" ci=0 i c
+  for (( i=1; i <= ${#plain}; i++ )); do
+    c="${plain[$i]}"
+    if [[ "$c" == " " ]]; then
+      out+=" "
+    else
+      out+="\033[38;5;${colors[$(( (ci % ${#colors[@]}) + 1 ))]}m${c}"
+      (( ci++ ))
+    fi
+  done
+  out+="\033[0m"
+  printf '%b' "$out"
+}
+
 # --- Nerd Font Icons ---
 ICON_REVIEW=$'\uf06e'        # nf-fa-eye
 ICON_ACTIVITY=$'\uf0f3'      # nf-fa-bell
@@ -154,5 +174,5 @@ if (( ${#parts} > 0 )); then
     (( i > 1 )) && result="${result} ${DIM}${SEP}${RESET} "
     result="${result}${parts[$i]}"
   done
-  print -P -- "$result"
+  rainbow_text "$result"
 fi
