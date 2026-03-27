@@ -261,6 +261,34 @@ Contents (replace variables with actual values, ensure valid JSON — escape any
 
 ---
 
+## Step 4.5: Register Task with task-ctl
+
+Register this worktree as a tracked task so it survives session crashes and can be resumed later.
+
+```bash
+task-ctl register \
+  --jira "$TICKET_ID" \
+  --repo "$OWNER/$REPO_NAME" \
+  --branch "$BRANCH_NAME" \
+  --worktree "$WORKTREE_PATH" \
+  --summary "$JIRA_SUMMARY" \
+  --type "$JIRA_TYPE" \
+  --priority "$JIRA_PRIORITY"
+```
+
+Where `$OWNER/$REPO_NAME` is the GitHub org/repo (e.g., `Stark-Tech-Group/stark-web`). Extract from `git -C "$WORKTREE_PATH" remote get-url origin`.
+
+**Note:** The `--plan` flag is omitted here because the plan file hasn't been generated yet. It will be linked after Step 6.
+
+**If task-ctl is not installed** (command not found): Log a warning but do NOT block the worktree setup. The worktree is still usable without task tracking.
+
+```
+Warning: task-ctl not found — task not registered. Install with:
+  cd ~/projects/personal/task-ctl && make install
+```
+
+---
+
 ## Step 5: Analyze Codebase
 
 ### 5.1 Identify Affected Modules
@@ -382,6 +410,18 @@ module paths, import rules, testing conventions, etc.>
 - Include a testing phase with the project's actual test commands
 - Surface any ambiguities as open questions rather than making assumptions
 - Include guardrails based on project conventions found in CLAUDE.md or .ralph/
+
+### 6.3 Link Plan to Task
+
+If task-ctl registration succeeded in Step 4.5, update the task with the plan path:
+
+```bash
+task-ctl link-plan "$TICKET_ID" --plan "$WORKTREE_PATH/plans/$TICKET_ID.md"
+```
+
+**If task-ctl is not installed or the task wasn't registered:** Skip silently.
+
+**Note:** If `link-plan` is not a recognized command (task-ctl may not have it yet), this is non-blocking. The plan file path can be discovered later via convention (`plans/<KEY>.md`).
 
 ---
 

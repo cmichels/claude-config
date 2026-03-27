@@ -458,6 +458,20 @@ mcp__github-cli__create_pull_request(
 
 Store returned PR number as `$PR_NUMBER`.
 
+### 6.5.1 Link PR to Task
+
+If the worktree has a `.jira-context` file (indicating it was set up via `/worktree`), link the PR to the tracked task:
+
+```bash
+task-ctl link-pr "$JIRA_TICKET" --pr $PR_NUMBER --url "https://github.com/$OWNER/$REPO/pull/$PR_NUMBER"
+```
+
+**If task-ctl is not installed or the task is not registered:** Log a warning but do NOT block PR creation. The PR is the priority.
+
+```
+Warning: task-ctl link-pr failed — PR not linked to task tracker.
+```
+
 ### 6.6 Add Labels
 
 ```bash
