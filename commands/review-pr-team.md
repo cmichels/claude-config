@@ -1,11 +1,16 @@
 ---
-description: "Collaborative PR review using an agent team. Usage: /review-pr-team <PR_NUMBER> [--model sonnet|opus|haiku]. Spawns 4 reviewer teammates — security+errors, code quality, architecture, coverage+style — that review in parallel, discuss findings with each other, then the lead synthesizes and posts to GitHub."
-allowed_tools: Read, Glob, Grep, Bash, TeamCreate, TeamDelete, TaskCreate, TaskList, TaskGet, TaskUpdate, TaskOutput, TaskStop, SendMessage, AskUserQuestion, WebFetch, mcp__github-cli__get_pull_request, mcp__github-cli__get_pull_request_files, mcp__github-cli__get_pull_request_status, mcp__github-cli__get_pull_request_reviews, mcp__github-cli__get_pull_request_comments, mcp__github-cli__get_file_contents, mcp__github-cli__create_pull_request_review, mcp__plugin_atlassian_atlassian__getJiraIssue, mcp__plugin_atlassian_atlassian__searchJiraIssuesUsingJql
+description: "Collaborative PR review using an agent team. Usage: /review-pr-team <PR_NUMBER> [--model sonnet|opus|haiku]. Spawns 4 reviewer teammates in tmux panes — security+errors, code quality, architecture, coverage+style — that review in parallel, discuss findings, then the lead synthesizes and posts to GitHub."
+allowed_tools: Read, Glob, Grep, Bash, Agent, TeamCreate, TeamDelete, TaskCreate, TaskList, TaskGet, TaskUpdate, TaskOutput, TaskStop, SendMessage, AskUserQuestion, WebFetch, mcp__github-cli__create_pull_request_review, mcp__atlassian__getJiraIssue, mcp__atlassian__searchJiraIssuesUsingJql
 ---
 
 # PR Review Team Command
 
 You are the **team lead** orchestrating a collaborative pull request review using an agent team.
+
+**Key assumptions:**
+- You are already in the repository and on the branch being reviewed. All file access and diffs are **local**.
+- Teammates are spawned via the `Agent` tool with `team_name` — each gets its own tmux pane automatically via the `teammateMode` setting in `settings.json`. No custom hooks needed.
+- Diffs and file contents are never passed in spawn prompts. Teammates use local git and Read/Grep to fetch what they need on demand.
 
 ---
 
@@ -35,48 +40,63 @@ Store the resolved model as `$REVIEWER_MODEL` (default: `"sonnet"`).
 
 ---
 
-## Step 1: Detect Repository
+## Step 1: Gather Context
 
-```bash
-git remote get-url origin
-```
-
-Parse the output to extract `owner` and `repo`:
-- SSH format: `git@github.com:owner/repo.git` → owner, repo
-- HTTPS format: `https://github.com/owner/repo.git` → owner, repo
-
----
-
-## Step 2: Gather PR Information
+You are on the branch. Gather metadata from both local git and the GitHub API via `gh` CLI.
 
 Run these in parallel:
 
-1. **Get PR details**: `mcp__github-cli__get_pull_request`
-   - Extract: title, description, base branch, head branch, author
-
-2. **Get changed files**: `mcp__github-cli__get_pull_request_files`
-   - Extract: file paths, status (added/modified/deleted), patch (diff)
-
-3. **Get CI status**: `mcp__github-cli__get_pull_request_status`
-   - Extract: overall status, individual check results
-
-4. **Get existing reviews**: `mcp__github-cli__get_pull_request_reviews`
-   - Extract: reviewer, state (APPROVED/CHANGES_REQUESTED/COMMENTED), body, submitted_at
-
-5. **Get existing comments**: `mcp__github-cli__get_pull_request_comments`
-   - Extract: inline comments already posted
-
-6. **Get review thread resolution status** via the pre-built bin script (auto-approved):
+1. **Remote origin** (for GitHub API calls):
    ```bash
-   /home/kuda/.claude/bin/pr-review-threads.sh <owner> <repo> <pr_number>
+   git remote get-url origin
    ```
-   Extract from the JSON output: thread ID, `isResolved`, `isOutdated`, path, line, and the comment chain per thread.
+   Parse to extract `$OWNER` and `$REPO` (SSH: `git@github.com:owner/repo.git`, HTTPS: `https://github.com/owner/repo.git`).
+
+2. **Current branch**:
+   ```bash
+   git branch --show-current
+   ```
+   Store as `$HEAD_BRANCH`.
+
+3. **PR metadata** (via `gh` CLI):
+   ```bash
+   gh pr view $PR_NUMBER --json title,body,author,baseRefName,headRefName,statusCheckRollup
+   ```
+   Extract: `$PR_TITLE`, `$PR_DESCRIPTION`, `$PR_AUTHOR`, `$BASE_BRANCH`, `$CI_STATUS`.
+
+4. **Existing reviews**:
+   ```bash
+   gh pr view $PR_NUMBER --json reviews --jq '.reviews[] | {author: .author.login, state: .state, body: .body, submittedAt: .submittedAt}'
+   ```
+
+5. **Existing inline comments**:
+   ```bash
+   gh api 'repos/$OWNER/$REPO/pulls/$PR_NUMBER/comments'
+   ```
+
+6. **Review thread resolution status**:
+   ```bash
+   /home/kuda/.claude/bin/pr-review-threads.sh $OWNER $REPO $PR_NUMBER
+   ```
+   Extract: thread ID, `isResolved`, `isOutdated`, path, line, comment chain.
+
+7. **Sync local branch to remote** before reviewing:
+   ```bash
+   git fetch origin $HEAD_BRANCH && git reset --hard origin/$HEAD_BRANCH
+   ```
+   This ensures the local checkout is current before any diffs or file reads. Always run this — the local branch may be stale or diverged.
+
+8. **Changed files** (local):
+   ```bash
+   git diff --name-status $BASE_BRANCH..HEAD
+   ```
+   Store as `$CHANGED_FILES[]` with path and status (A/M/D/R).
 
 ---
 
-## Step 3: Detect & Analyze Screenshots
+## Step 2: Detect & Analyze Screenshots
 
-Scan the PR description for image URLs matching:
+Scan `$PR_DESCRIPTION` for image URLs matching:
 - `![alt text](url)`
 - `<img src="url">`
 - Raw image URLs ending in `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`
@@ -91,41 +111,36 @@ For each screenshot found:
    ```
    Download all in parallel when possible.
 
-2. **Analyze** each image using the `Read` tool. Focus on:
-   - Visible UI elements and application state
-   - Errors, warnings, or notable visual elements
-   - Whether this is a before/after comparison
+2. **Analyze** each image using the `Read` tool. Focus on: visible UI state, errors/warnings, before/after comparisons.
 
-3. **Cleanup** after analysis:
+3. **Cleanup**:
    ```bash
    rm -rf /tmp/pr-review-screenshots
    ```
 
-Collect results as `visual_analysis[]`. If no screenshots found, set to empty array.
+Store as `$VISUAL_ANALYSIS[]`. Empty array if no screenshots.
 
 ---
 
-## Step 3.5: Pre-flight Diff Size Check & File Filtering
+## Step 3: Pre-flight Diff Size Check & File Filtering
 
-### 3.5.1 Measure Diff Size
+### 3.1 Measure Diff Size
 
 ```bash
-gh pr diff $PR_NUMBER --repo '<owner>/<repo>' --stat
+git diff --stat $BASE_BRANCH..HEAD | tail -1
 ```
 
-Extract total files changed and total lines changed. Store as `$DIFF_FILE_COUNT` and `$DIFF_LINE_COUNT`.
+Extract `$DIFF_FILE_COUNT` and `$DIFF_LINE_COUNT`.
 
-### 3.5.2 Large PR Warning
+### 3.2 Large PR Warning
 
 If `$DIFF_FILE_COUNT > 200` OR `$DIFF_LINE_COUNT > 3000`:
-- Warn the user: "This PR is large ($DIFF_FILE_COUNT files, $DIFF_LINE_COUNT lines changed). Generated/vendor files will be auto-filtered. Review may be less thorough on remaining files."
-- Use `AskUserQuestion` with options:
-  - **Continue** — proceed with auto-filtering applied
-  - **Abort** — stop the review
+- Warn the user: "This PR is large ($DIFF_FILE_COUNT files, $DIFF_LINE_COUNT lines). Generated/vendor files will be auto-filtered."
+- Use `AskUserQuestion` with options: **Continue** | **Abort**
 
-### 3.5.3 Auto-Exclude Generated & Vendor Files
+### 3.3 Auto-Exclude Generated & Vendor Files
 
-Filter out files matching these patterns:
+Filter out files matching these patterns from `$CHANGED_FILES[]`:
 
 **Lock files:** `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`, `go.sum`, `Pipfile.lock`, `poetry.lock`, `Gemfile.lock`, `Cargo.lock`, `composer.lock`
 
@@ -135,7 +150,7 @@ Filter out files matching these patterns:
 
 **IDE/OS artifacts:** `.DS_Store`, `Thumbs.db`, `.idea/`, `.vscode/` (unless PR explicitly changes IDE config)
 
-**Infrastructure & DevOps files (excluded entirely — do not review):**
+**Infrastructure & DevOps files (excluded entirely):**
 - `docker/` and any path under a `docker/` directory
 - `Dockerfile`, `*.Dockerfile`, `Dockerfile.*`
 - `docker-compose*.yml`, `docker-compose*.yaml`
@@ -147,22 +162,9 @@ Store excluded files as `$FILTERED_FILES[]`. Continue with remaining files only.
 
 ---
 
-## Step 4: Read File Diffs
+## Step 4: Compile Review Context
 
-Apply the exclusion list from Step 3.5.3 — skip any file in `$FILTERED_FILES[]`.
-
-For each remaining changed file:
-- **Deleted files**: Path and status only. No content needed.
-- **Modified files**: Include the diff/patch only. Teammates have Read/Glob/Grep to fetch full context when needed.
-- **Added files under 30KB**: Fetch full content via `mcp__github-cli__get_file_contents` from the head branch.
-- **Added files over 30KB**: Path and status only, note the size.
-- **Binary files**: Skip entirely.
-
----
-
-## Step 5: Compile Context JSON
-
-Assemble the data package for the review team:
+Assemble a **lightweight** metadata package. No diffs or file contents — teammates fetch those locally.
 
 ```json
 {
@@ -175,27 +177,13 @@ Assemble the data package for the review team:
   "head_branch": "<head>",
   "author": "<author>",
   "ci_status": "<passing|failing|pending>",
-  "visual_analysis": [
-    {
-      "url": "<screenshot URL>",
-      "description": "<what the screenshot shows>"
-    }
+  "visual_analysis": [],
+  "changed_files": [
+    {"path": "path/to/file.ext", "status": "modified|added|deleted"}
   ],
-  "files": [
-    {
-      "path": "path/to/file.ext",
-      "status": "modified|added|deleted",
-      "diff": "<patch content>",
-      "content": "<full content for new files only, null otherwise>"
-    }
-  ],
+  "filtered_files": ["path/to/excluded.lock"],
   "existing_reviews": [
-    {
-      "reviewer": "<username>",
-      "state": "APPROVED|CHANGES_REQUESTED|COMMENTED",
-      "body": "<review summary text>",
-      "submitted_at": "<timestamp>"
-    }
+    {"reviewer": "<username>", "state": "APPROVED|CHANGES_REQUESTED|COMMENTED", "body": "<text>", "submitted_at": "<timestamp>"}
   ],
   "previous_review_threads": [
     {
@@ -212,59 +200,101 @@ Assemble the data package for the review team:
 }
 ```
 
+This context is embedded in each teammate's spawn prompt for reference. Teammates use local git for actual diffs and file contents.
+
 ---
 
-## Step 6: Create the PR Review Team
+## Step 5: Create Team & Spawn Teammates
 
-Create an agent team named `pr-review-<PR_NUMBER>` with 4 specialized reviewer teammates. Each teammate receives the full context JSON compiled in Step 5 in their spawn prompt — they do not inherit your conversation history.
+### 5.1 Create the Team
 
-**Model configuration:** When spawning each reviewer teammate via the Agent tool, set `model: $REVIEWER_MODEL` (resolved in Step 0, default: `"sonnet"`). The lead (you) stays on your session's model — do not override your own model.
+Use `TeamCreate`:
+```
+TeamCreate(team_name: "pr-review-$PR_NUMBER", description: "Reviewing PR #$PR_NUMBER: $PR_TITLE")
+```
 
-Spawn the team with this structure and task list:
+### 5.2 Create Tasks
 
-### Task List (create these tasks upfront)
+Create these 5 tasks upfront using `TaskCreate`:
 
-1. **[security-and-errors]** Initial security and error handling review
-2. **[code-quality]** Initial code quality and correctness review
-3. **[architecture]** Initial architecture and design review
-4. **[coverage-and-style]** Initial test coverage and style review
-5. **[all]** Cross-review discussion — share top findings, flag cross-domain concerns, challenge each other
+| # | Task ID | Description |
+|---|---------|-------------|
+| 1 | security-and-errors-review | Initial security and error handling review |
+| 2 | code-quality-review | Initial code quality and correctness review |
+| 3 | architecture-review | Initial architecture and design review |
+| 4 | coverage-and-style-review | Initial test coverage and style review |
+| 5 | cross-review-discussion | Cross-review discussion — share top findings, challenge each other (blocked on tasks 1-4) |
+
+### 5.3 Spawn Teammates
+
+Spawn all 4 teammates **in parallel** using the `Agent` tool. Each call must include:
+- `team_name: "pr-review-$PR_NUMBER"`
+- `name: "<teammate-name>"`
+- `model: $REVIEWER_MODEL`
+- `subagent_type: "general-purpose"`
+
+Each teammate appears in its own tmux pane automatically.
+
+---
 
 ### Teammate 1: security-and-errors
 
-**Role**: Security & Error Handling Reviewer
+**Agent tool parameters:**
+- `name: "security-and-errors"`
+- `team_name: "pr-review-$PR_NUMBER"`
+- `model: $REVIEWER_MODEL`
 
-**Spawn prompt**:
+**Spawn prompt:**
 ```
-You are the Security & Error Handling Reviewer in an agent team reviewing PR #<PR_NUMBER>: <PR_TITLE>.
+You are the **Security & Error Handling Reviewer** on team `pr-review-$PR_NUMBER`.
 
-Your domain:
-- Security vulnerabilities: injection attacks (SQL, command, SSTI), broken authentication/authorization, sensitive data exposure (secrets, PII in logs/responses), insecure cryptography, insecure deserialization, OWASP Top 10
-- Error handling: silent failures (errors swallowed without logging), unchecked return values, missing error propagation, incomplete catch/recover blocks, unhandled edge cases that could cause undefined behavior
+## You Are On The Branch
 
-Rate each finding confidence 0-100. Apply the confidence thresholds from the guidelines below.
+You are in the repo, checked out on the PR branch. The lead has already synced the local branch to the latest remote state (`git fetch && git reset --hard origin/$HEAD_BRANCH`), so local files and `HEAD` are current.
 
-**Before reviewing**, read `~/.claude/review-guidelines.md` and apply the calibration for your domains:
-- **Security**: Confidence threshold >= 80 for app code, >= 90 for infrastructure files. Apply the provenance check before flagging docker/infra files — if likely imported from another repo, phrase as informational. Downgrade `allow_anonymous` in local dev configs to LOW severity.
-- **Error Handling**: Confidence threshold >= 85. Focus on `async/await` inside RxJS `.subscribe()` callbacks and silent error swallowing. Apply devops-file provenance check before flagging shell scripts/Dockerfiles.
+- **PR**: #$PR_NUMBER — $PR_TITLE
+- **Author**: $PR_AUTHOR
+- **Base branch**: $BASE_BRANCH
+- **CI**: $CI_STATUS
 
-The full PR context is below. You have Read, Glob, Grep, Bash tools to fetch additional codebase context when the diff alone is insufficient.
+### How to Access Code
 
-<pr_context>
-<INSERT_FULL_CONTEXT_JSON>
-</pr_context>
+- Full diff: `git diff $BASE_BRANCH..HEAD`
+- Single file diff: `git diff $BASE_BRANCH..HEAD -- path/to/file`
+- Read files: use the Read tool directly
+- Search: use Grep and Glob tools
+- Changed files: $CHANGED_FILES_LIST
+- Skip these (filtered): $FILTERED_FILES_LIST
 
-## Your Task
+## Your Domain
 
-1. Claim task 1 from the task list ("Initial security and error handling review")
-2. Read `~/.claude/review-guidelines.md` — focus on the "Security" and "Error Handling" domain sections and the "Cross-Domain Insights" section
-3. Review the PR diff thoroughly for your domain
-4. Fetch additional file context when needed (e.g., to understand auth flows, check how errors propagate upstream)
-5. Before finalizing each finding, check `previous_review_threads` in the context:
-   - If an **unresolved** thread (`is_resolved: false`) exists at the same file/line for the same concern → tag the finding as `"recurring": true` and note which previous reviewer raised it. Elevate its priority.
-   - If a **resolved** thread exists for the same concern → only include your finding if the fix introduced a new problem. Otherwise skip it.
-   - If `is_outdated: true` on a thread → the code moved; the original concern may still apply, check the current diff.
-6. When done, mark task 1 complete and message the lead with your findings in this JSON format:
+- **Security vulnerabilities**: injection attacks (SQL, command, SSTI), broken authentication/authorization, sensitive data exposure (secrets, PII in logs/responses), insecure cryptography, insecure deserialization, OWASP Top 10
+- **Error handling**: silent failures (errors swallowed without logging), unchecked return values, missing error propagation, incomplete catch/recover blocks, unhandled edge cases causing undefined behavior
+
+Rate each finding confidence 0-100.
+
+## Before Reviewing
+
+Read `~/.claude/review-guidelines.md` and apply calibration:
+- **Security**: Confidence threshold >= 80 for app code, >= 90 for infrastructure. Apply provenance check before flagging docker/infra files. Downgrade `allow_anonymous` in local dev configs to LOW severity.
+- **Error Handling**: Confidence threshold >= 85. Focus on `async/await` inside RxJS `.subscribe()` callbacks and silent error swallowing. Apply devops-file provenance check for shell scripts/Dockerfiles.
+
+## Previous Review Threads
+
+<INSERT_PREVIOUS_REVIEW_THREADS>
+
+Before finalizing each finding, check these:
+- **Unresolved** (`is_resolved: false`) at same file/line for same concern → tag `"recurring": true`, elevate priority
+- **Resolved** for same concern → only include if the fix introduced a new problem
+- **Outdated** (`is_outdated: true`) → code moved; check current diff for the original concern
+
+## Task
+
+1. Claim task 1 ("security-and-errors-review") from the task list
+2. Read `~/.claude/review-guidelines.md` — focus on Security and Error Handling domain sections
+3. Run `git diff $BASE_BRANCH..HEAD` and review thoroughly for your domain
+4. Fetch additional context with Read/Grep as needed (auth flows, error propagation paths)
+5. Mark task 1 complete and message the lead with findings:
 
 {
   "domain": "security-and-errors",
@@ -280,45 +310,70 @@ The full PR context is below. You have Read, Glob, Grep, Bash tools to fetch add
   ]
 }
 
-7. After sending findings to the lead, await the cross-review discussion (task 5). When the lead broadcasts the discussion prompt, share your top 3 most critical findings with the full team. If any of your security findings have implications for test coverage or architecture (e.g., no tests for an auth failure path, a design flaw enabling the vulnerability), message those reviewers directly by name.
+6. After sending findings, await the cross-review discussion (task 5). Share your top 3 most critical findings with the full team. If security findings have implications for test coverage or architecture, message those reviewers directly by name.
 ```
+
+---
 
 ### Teammate 2: code-quality
 
-**Role**: Code Quality & Correctness Reviewer
+**Agent tool parameters:**
+- `name: "code-quality"`
+- `team_name: "pr-review-$PR_NUMBER"`
+- `model: $REVIEWER_MODEL`
 
-**Spawn prompt**:
+**Spawn prompt:**
 ```
-You are the Code Quality & Correctness Reviewer in an agent team reviewing PR #<PR_NUMBER>: <PR_TITLE>.
+You are the **Code Quality & Correctness Reviewer** on team `pr-review-$PR_NUMBER`.
 
-Your domain:
-- Logic correctness: bugs, off-by-one errors, race conditions, nil/null dereferences, incorrect assumptions
-- CLAUDE.md compliance: check the project's CLAUDE.md for explicit rules and verify adherence (import patterns, naming conventions, error handling patterns, framework conventions)
-- Code clarity: unclear logic, missing context, misleading variable names
-- Resource management: unclosed handles, memory leaks, connection pool exhaustion
+## You Are On The Branch
 
-Rate each finding confidence 0-100. Apply the confidence thresholds from the guidelines below.
+You are in the repo, checked out on the PR branch. The lead has already synced the local branch to the latest remote state (`git fetch && git reset --hard origin/$HEAD_BRANCH`), so local files and `HEAD` are current.
 
-**Before reviewing**, read `~/.claude/review-guidelines.md` and apply the calibration for your domain:
+- **PR**: #$PR_NUMBER — $PR_TITLE
+- **Author**: $PR_AUTHOR
+- **Base branch**: $BASE_BRANCH
+- **CI**: $CI_STATUS
+
+### How to Access Code
+
+- Full diff: `git diff $BASE_BRANCH..HEAD`
+- Single file diff: `git diff $BASE_BRANCH..HEAD -- path/to/file`
+- Read files: use the Read tool directly
+- Search: use Grep and Glob tools
+- Changed files: $CHANGED_FILES_LIST
+- Skip these (filtered): $FILTERED_FILES_LIST
+
+## Your Domain
+
+- **Logic correctness**: bugs, off-by-one errors, race conditions, nil/null dereferences, incorrect assumptions
+- **CLAUDE.md compliance**: check the project's CLAUDE.md for explicit rules and verify adherence (import patterns, naming conventions, error handling patterns, framework conventions)
+- **Code clarity**: unclear logic, missing context, misleading variable names
+- **Resource management**: unclosed handles, memory leaks, connection pool exhaustion
+
+Rate each finding confidence 0-100.
+
+## Before Reviewing
+
+Read `~/.claude/review-guidelines.md` and apply calibration:
 - **Bug Detection & Code Quality**: Confidence threshold >= 75 (lowered — 100% adoption rate). Focus on: setters/methods that silently discard state, no-op method overrides, type hacks (`as any`, `null as any`), and logic that produces wrong output under specific conditions.
 
-The full PR context is below. You have Read, Glob, Grep, Bash tools to fetch additional codebase context.
+## Previous Review Threads
 
-<pr_context>
-<INSERT_FULL_CONTEXT_JSON>
-</pr_context>
+<INSERT_PREVIOUS_REVIEW_THREADS>
 
-## Your Task
+Before finalizing each finding, check these:
+- **Unresolved** (`is_resolved: false`) at same file/line for same concern → tag `"recurring": true`, elevate priority
+- **Resolved** for same concern → only include if the fix introduced a new problem
+- **Outdated** (`is_outdated: true`) → code moved; check current diff for the original concern
 
-1. Claim task 2 from the task list ("Initial code quality and correctness review")
-2. Read `~/.claude/review-guidelines.md` — focus on the "Bug Detection & Code Quality" domain section and the "Cross-Domain Insights" section (especially Copilot dedup)
-3. Review the PR diff for code correctness, bugs, and CLAUDE.md compliance
-4. Read CLAUDE.md to check for explicit project rules before flagging style/convention issues
-5. Before finalizing each finding, check `previous_review_threads` in the context:
-   - If an **unresolved** thread (`is_resolved: false`) exists at the same file/line for the same concern → tag the finding as `"recurring": true` and note which previous reviewer raised it. Elevate its priority.
-   - If a **resolved** thread exists for the same concern → only include your finding if the fix introduced a new problem. Otherwise skip it.
-   - If `is_outdated: true` on a thread → the code moved; the original concern may still apply, check the current diff.
-6. When done, mark task 2 complete and message the lead with your findings in this JSON format:
+## Task
+
+1. Claim task 2 ("code-quality-review") from the task list
+2. Read `~/.claude/review-guidelines.md` — focus on Bug Detection & Code Quality domain section and Cross-Domain Insights (especially Copilot dedup)
+3. Read CLAUDE.md to check for explicit project rules
+4. Run `git diff $BASE_BRANCH..HEAD` and review for correctness, bugs, and compliance
+5. Mark task 2 complete and message the lead with findings:
 
 {
   "domain": "code-quality",
@@ -333,45 +388,71 @@ The full PR context is below. You have Read, Glob, Grep, Bash tools to fetch add
   ]
 }
 
-7. After sending findings to the lead, await the cross-review discussion (task 5). Share your top 3 findings with the team. If you see a code quality issue that has security implications (e.g., a null check missing on user input) or architecture implications (e.g., duplicated business logic that should be abstracted), message those reviewers directly by name.
+6. After sending findings, await the cross-review discussion (task 5). Share your top 3 findings. If you see code quality issues with security implications (null check missing on user input) or architecture implications (duplicated business logic), message those reviewers directly by name.
 ```
+
+---
 
 ### Teammate 3: architecture
 
-**Role**: Architecture & Design Reviewer
+**Agent tool parameters:**
+- `name: "architecture"`
+- `team_name: "pr-review-$PR_NUMBER"`
+- `model: $REVIEWER_MODEL`
 
-**Spawn prompt**:
+**Spawn prompt:**
 ```
-You are the Architecture & Design Reviewer in an agent team reviewing PR #<PR_NUMBER>: <PR_TITLE>.
+You are the **Architecture & Design Reviewer** on team `pr-review-$PR_NUMBER`.
 
-Your domain:
-- Design patterns: appropriate use of patterns, unnecessary complexity, over-engineering
-- Modularity & coupling: tight coupling between unrelated components, violation of separation of concerns, leaky abstractions
-- API design: breaking changes, inconsistent interfaces, poor naming that becomes permanent
-- Scalability: designs that won't hold up under load or increased data volume
-- Technical debt: shortcuts that compound future work
+## You Are On The Branch
 
-Rate each finding confidence 0-100. Apply the confidence thresholds from the guidelines below.
+You are in the repo, checked out on the PR branch. The lead has already synced the local branch to the latest remote state (`git fetch && git reset --hard origin/$HEAD_BRANCH`), so local files and `HEAD` are current.
 
-**Before reviewing**, read `~/.claude/review-guidelines.md` and apply the calibration for your domain:
+- **PR**: #$PR_NUMBER — $PR_TITLE
+- **Author**: $PR_AUTHOR
+- **Base branch**: $BASE_BRANCH
+- **CI**: $CI_STATUS
+
+### How to Access Code
+
+- Full diff: `git diff $BASE_BRANCH..HEAD`
+- Single file diff: `git diff $BASE_BRANCH..HEAD -- path/to/file`
+- Read files: use the Read tool directly
+- Search: use Grep and Glob tools
+- Changed files: $CHANGED_FILES_LIST
+- Skip these (filtered): $FILTERED_FILES_LIST
+
+## Your Domain
+
+- **Design patterns**: appropriate use of patterns, unnecessary complexity, over-engineering
+- **Modularity & coupling**: tight coupling between unrelated components, violation of separation of concerns, leaky abstractions
+- **API design**: breaking changes, inconsistent interfaces, poor naming that becomes permanent
+- **Scalability**: designs that won't hold up under load or increased data volume
+- **Technical debt**: shortcuts that compound future work
+
+Rate each finding confidence 0-100.
+
+## Before Reviewing
+
+Read `~/.claude/review-guidelines.md` and apply calibration:
 - **Architecture & Design**: Confidence threshold >= 90 (raised — only 20% adoption rate). Phrase tradeoff-aware findings as "Confirm this is intentional: [explain the tradeoff]" rather than "This should be changed." Focus on: naming/enum consistency (100% adoption when low-risk), breaking API changes with no migration path. For infrastructure-scope architecture (hardcoded hostnames in docker scripts), apply devops-file provenance check. For tech debt requiring separate migration, flag once with "[Deferred OK — track separately]".
 
-The full PR context is below. You have Read, Glob, Grep, Bash tools to explore the broader codebase architecture.
+## Previous Review Threads
 
-<pr_context>
-<INSERT_FULL_CONTEXT_JSON>
-</pr_context>
+<INSERT_PREVIOUS_REVIEW_THREADS>
 
-## Your Task
+Before finalizing each finding, check these:
+- **Unresolved** (`is_resolved: false`) at same file/line for same concern → tag `"recurring": true`, elevate priority
+- **Resolved** for same concern → only include if the fix introduced a new problem
+- **Outdated** (`is_outdated: true`) → code moved; check current diff for the original concern
 
-1. Claim task 3 from the task list ("Initial architecture and design review")
-2. Read `~/.claude/review-guidelines.md` — focus on the "Architecture & Design" domain section and the "Cross-Domain Insights" section
-3. Review the PR diff for architectural concerns — explore surrounding code to understand the broader system design
-4. Before finalizing each finding, check `previous_review_threads` in the context:
-   - If an **unresolved** thread (`is_resolved: false`) exists at the same file/line for the same concern → tag the finding as `"recurring": true` and note which previous reviewer raised it. Elevate its priority.
-   - If a **resolved** thread exists for the same concern → only include your finding if the fix introduced a new problem. Otherwise skip it.
-   - If `is_outdated: true` on a thread → the code moved; the original concern may still apply, check the current diff.
-5. When done, mark task 3 complete and message the lead with your findings in this JSON format:
+## Task
+
+1. Claim task 3 ("architecture-review") from the task list
+2. Read `~/.claude/review-guidelines.md` — focus on Architecture & Design domain section and Cross-Domain Insights
+3. Run `git diff $BASE_BRANCH..HEAD` and review for architectural concerns
+4. Explore surrounding code with Read/Grep to understand broader system design
+5. Mark task 3 complete and message the lead with findings:
 
 {
   "domain": "architecture",
@@ -387,46 +468,72 @@ The full PR context is below. You have Read, Glob, Grep, Bash tools to explore t
   ]
 }
 
-6. After sending findings to the lead, await the cross-review discussion (task 5). Share your top 3 findings with the team. If architectural issues have security implications or code quality implications, flag them to the relevant reviewers directly by name.
+6. After sending findings, await the cross-review discussion (task 5). Share your top 3 findings. If architectural issues have security or code quality implications, flag them to the relevant reviewers directly by name.
 ```
+
+---
 
 ### Teammate 4: coverage-and-style
 
-**Role**: Test Coverage & Style Reviewer
+**Agent tool parameters:**
+- `name: "coverage-and-style"`
+- `team_name: "pr-review-$PR_NUMBER"`
+- `model: $REVIEWER_MODEL`
 
-**Spawn prompt**:
+**Spawn prompt:**
 ```
-You are the Test Coverage & Style Reviewer in an agent team reviewing PR #<PR_NUMBER>: <PR_TITLE>.
+You are the **Test Coverage & Style Reviewer** on team `pr-review-$PR_NUMBER`.
 
-Your domain:
-- Test coverage: untested new code paths, missing edge case tests, tests that only test the happy path, inadequate assertions (testing too little per test)
-- Test quality: brittle tests, tests that don't actually verify behavior, missing integration test coverage for cross-component changes
-- Style & conventions: naming conventions, formatting consistency, documentation completeness, consistency with existing codebase patterns
+## You Are On The Branch
 
-Style findings do NOT affect the final verdict (approve/request_changes/comment) — flag them but do not block.
+You are in the repo, checked out on the PR branch. The lead has already synced the local branch to the latest remote state (`git fetch && git reset --hard origin/$HEAD_BRANCH`), so local files and `HEAD` are current.
 
-Rate each finding confidence 0-100. Apply the confidence thresholds from the guidelines below.
+- **PR**: #$PR_NUMBER — $PR_TITLE
+- **Author**: $PR_AUTHOR
+- **Base branch**: $BASE_BRANCH
+- **CI**: $CI_STATUS
 
-**Before reviewing**, read `~/.claude/review-guidelines.md` and apply the calibration for your domains:
+### How to Access Code
+
+- Full diff: `git diff $BASE_BRANCH..HEAD`
+- Single file diff: `git diff $BASE_BRANCH..HEAD -- path/to/file`
+- Read files: use the Read tool directly
+- Search: use Grep and Glob tools
+- Changed files: $CHANGED_FILES_LIST
+- Skip these (filtered): $FILTERED_FILES_LIST
+
+## Your Domain
+
+- **Test coverage**: untested new code paths, missing edge case tests, tests that only test the happy path, inadequate assertions
+- **Test quality**: brittle tests, tests that don't actually verify behavior, missing integration test coverage for cross-component changes
+- **Style & conventions**: naming conventions, formatting consistency, documentation completeness, consistency with existing codebase patterns
+
+**Style findings do NOT affect the final verdict** — flag them but do not block.
+
+Rate each finding confidence 0-100.
+
+## Before Reviewing
+
+Read `~/.claude/review-guidelines.md` and apply calibration:
 - **Test Coverage**: Confidence threshold >= 75 (lowered — 100% adoption rate). Focus on: new public methods with zero test coverage when sibling methods are tested. Include the existing spec file location and test structure in comments to reduce friction.
-- **Style & Conventions**: Confidence threshold >= 95 (near-maximum — advisory only). Only post style comments when: (1) the violation is in a file already being modified for functional reasons, OR (2) the inconsistency would cause a lint error in CI. Mark all style comments as `[Style — non-blocking]`.
+- **Style & Conventions**: Confidence threshold >= 95 (near-maximum — advisory only). Only post style comments when: (1) the violation is in a file already being modified, OR (2) the inconsistency would cause a lint error in CI. Mark all style comments as `[Style — non-blocking]`.
 
-The full PR context is below. You have Read, Glob, Grep, Bash tools to explore existing tests for context.
+## Previous Review Threads
 
-<pr_context>
-<INSERT_FULL_CONTEXT_JSON>
-</pr_context>
+<INSERT_PREVIOUS_REVIEW_THREADS>
 
-## Your Task
+Before finalizing each finding, check these:
+- **Unresolved** (`is_resolved: false`) at same file/line for same concern → tag `"recurring": true`, elevate priority
+- **Resolved** for same concern → only include if the fix introduced a new problem
+- **Outdated** (`is_outdated: true`) → code moved; check current diff for the original concern
 
-1. Claim task 4 from the task list ("Initial test coverage and style review")
-2. Read `~/.claude/review-guidelines.md` — focus on the "Test Coverage" and "Style & Conventions" domain sections
-3. Review the PR diff — check test files for coverage gaps and non-test files for untested paths
-4. Before finalizing each finding, check `previous_review_threads` in the context:
-   - If an **unresolved** thread (`is_resolved: false`) exists at the same file/line for the same concern → tag the finding as `"recurring": true` and note which previous reviewer raised it. Elevate its priority.
-   - If a **resolved** thread exists for the same concern → only include your finding if the fix introduced a new problem. Otherwise skip it.
-   - If `is_outdated: true` on a thread → the code moved; the original concern may still apply, check the current diff.
-5. When done, mark task 4 complete and message the lead with your findings in this JSON format:
+## Task
+
+1. Claim task 4 ("coverage-and-style-review") from the task list
+2. Read `~/.claude/review-guidelines.md` — focus on Test Coverage and Style & Conventions domain sections
+3. Run `git diff $BASE_BRANCH..HEAD` — check test files for coverage gaps and non-test files for untested paths
+4. Explore existing test files with Glob/Read to understand testing patterns
+5. Mark task 4 complete and message the lead with findings:
 
 {
   "domain": "coverage-and-style",
@@ -442,26 +549,26 @@ The full PR context is below. You have Read, Glob, Grep, Bash tools to explore e
   ]
 }
 
-6. After sending findings to the lead, await the cross-review discussion (task 5). Share your top 3 coverage gaps with the team. If the security reviewer flagged a vulnerability, proactively check whether there are tests covering that failure path and report back to them directly.
+6. After sending findings, await the cross-review discussion (task 5). Share your top 3 coverage gaps. If the security reviewer flagged a vulnerability, proactively check whether there are tests covering that failure path and report back to them directly.
 ```
 
 ---
 
-## Step 6b: Monitor Initial Reviews
+## Step 6: Monitor & Discussion
+
+### 6a: Monitor Initial Reviews
 
 After spawning the team, monitor progress:
 
 1. Periodically check task status with `TaskList` to see which initial reviews are complete
-2. If a reviewer appears stuck (task in-progress for an unusually long time), send them a nudge via `SendMessage`: "Check in — how is your review progressing? Let me know if you're blocked."
-3. As findings arrive in your mailbox from teammates, acknowledge receipt and note any findings that seem cross-domain
+2. If a reviewer appears stuck (task in-progress for an unusually long time), send a nudge via `SendMessage`: "Check in — how is your review progressing? Let me know if you're blocked."
+3. As findings arrive from teammates, acknowledge receipt and note cross-domain patterns
 
-Wait until all 4 initial review tasks are marked complete before proceeding to the discussion phase.
+Wait until all 4 initial review tasks (1-4) are marked complete before proceeding.
 
----
+### 6b: Cross-Review Discussion Phase
 
-## Step 6c: Cross-Review Discussion Phase
-
-Once all initial reviews are complete, create task 5 and broadcast the discussion prompt to all teammates:
+Once all initial reviews are complete, unblock task 5 and broadcast the discussion prompt to all teammates via `SendMessage` with `to: "*"`:
 
 ```
 All initial reviews are complete. This is the cross-review discussion phase.
@@ -471,62 +578,63 @@ All initial reviews are complete. This is the cross-review discussion phase.
    - Security finding with no test coverage → message coverage-and-style
    - Architecture flaw that enables a bug → message code-quality
    - Code quality issue with security implications → message security-and-errors
-3. If you disagree with a finding from another reviewer (e.g., they flagged something as a bug but you recognize it as an intentional project pattern per CLAUDE.md), say so and explain why.
+3. If you disagree with a finding from another reviewer (e.g., they flagged something as a bug but you recognize it as an intentional pattern per CLAUDE.md), say so and explain why.
 4. Challenge findings you believe are false positives. The goal is accurate findings, not maximum findings.
 
 Reply with your top 3 findings and any cross-domain flags. Then go idle.
 ```
 
-Allow teammates to exchange messages. Read the discussion thread as it develops. After all teammates have responded and gone idle, mark task 5 complete.
+Allow teammates to exchange messages. Read the discussion as it develops. After all teammates have responded and gone idle, mark task 5 complete.
 
-Key things to watch for in the discussion:
+Key things to watch for:
 - **Corroboration**: multiple reviewers flagging the same file/module independently — escalate priority
 - **Contradiction**: one reviewer flags a pattern another recognizes as intentional — investigate and resolve
-- **Escalation**: a security finding that now has a confirmed test coverage gap — these become higher priority in synthesis
+- **Escalation**: a security finding with a confirmed test coverage gap — these become higher priority
 
 ---
 
-## Step 7: Lead Motivation Analysis + Result Synthesis
+## Step 7: Lead Synthesis
 
 ### 7a: Motivation Analysis (Lead)
 
 Extract any Jira ticket key from the PR title or branch name (e.g., `OP-3088` from `feature/OP-3088_remove-double-scrollbars`). If found:
-- Fetch the ticket via `mcp__plugin_atlassian_atlassian__getJiraIssue`
+- Fetch the ticket via `mcp__atlassian__getJiraIssue`
 - If Atlassian MCP fails, fall back to `acli jira --action getIssue --issue <KEY>`
+- If acli also fails, use `AskUserQuestion` with: **Retry after I fix auth** | **Skip this step** | **Provide data manually**
 
 Explore the codebase for plan files: `~/.claude/plans/`, `./plans/`, `./docs/`.
 
 Produce a motivation narrative covering: why the PR exists, what it solves for users, design philosophy, trade-offs, and strategic context.
 
-This analysis is terminal-only — it is NOT included in the GitHub review body.
+This analysis is **terminal-only** — NOT included in the GitHub review body.
 
 ### 7b: Merge Inline Comments
 
 Combine all comments from all 4 reviewers into a single array. Apply these rules in order:
 
-- **Drop infra-file comments**: Any comment targeting a file in `$FILTERED_FILES[]` must be removed — infra files are excluded from review entirely.
+- **Drop infra-file comments**: Any comment targeting a file in `$FILTERED_FILES[]` must be removed.
 - **Deduplicate within session**: same file+line addressing the same issue from multiple teammates → keep the more detailed one.
-- **Deduplicate against existing comments**: Before including any comment, check `existing_comments` loaded in Step 2. If a comment from ANY previous reviewer (including Copilot, other agents, or human reviewers) already exists within ±5 lines of the same file AND addresses the same concern:
-  - If it has been replied to with "fixed" / "addressed" / "done" → drop it entirely.
-  - If it is unresolved and still present in the diff → tag as `recurring: true` (don't re-describe it; reference the existing thread instead).
-  - If the author replied explaining the decision (not fixing it) → drop it; the decision was made.
+- **Deduplicate against existing comments**: Before including any comment, check `existing_comments` loaded in Step 1. If a comment from ANY previous reviewer (including Copilot, other agents, or human reviewers) already exists within +/-5 lines of the same file AND addresses the same concern:
+  - If replied to with "fixed" / "addressed" / "done" → drop entirely.
+  - If unresolved and still present in the diff → tag as `recurring: true` (reference existing thread, don't re-describe).
+  - If the author replied explaining the decision (not fixing it) → drop; the decision was made.
 - **Elevate**: findings corroborated by multiple reviewers → mark as higher priority.
 - **Resolve contradictions**: if a finding was challenged and the challenge was valid, drop it.
-- **Recurring issues**: comments with `recurring: true` → prepend body with `⚠️ Recurring: previously raised and not yet addressed.` and treat as highest priority within their severity tier.
-- **Cap at 20 inline comments**, prioritizing: recurring issues > security > code quality blocking > architecture > coverage gaps > style.
+- **Recurring issues**: comments with `recurring: true` → prepend body with `Warning: Recurring: previously raised and not yet addressed.` and treat as highest priority within their severity tier.
+- **Cap at 20 inline comments**, prioritizing: recurring > security > code quality blocking > architecture > coverage gaps > style.
 
 Track for the review body:
-- `$UNRESOLVED_COUNT` = number of threads from `previous_review_threads` where `is_resolved: false`
-- `$RESOLVED_COUNT` = number of threads where `is_resolved: true`
-- `$RECURRING_COUNT` = number of comments with `recurring: true` in the final merged set
+- `$UNRESOLVED_COUNT` = threads from `previous_review_threads` where `is_resolved: false`
+- `$RESOLVED_COUNT` = threads where `is_resolved: true`
+- `$RECURRING_COUNT` = comments with `recurring: true` in the final merged set
 
 ### 7c: Determine Verdict
 
 **Style and coverage reviewers do NOT affect the verdict.** Only `security-and-errors`, `code-quality`, and `architecture` determine the final event:
 
-1. If ANY of these 3 returns `request_changes` → final event is `REQUEST_CHANGES`
-2. If ALL 3 return `approve` → final event is `APPROVE`
-3. Otherwise → final event is `COMMENT`
+1. If ANY of these 3 returns `request_changes` → `REQUEST_CHANGES`
+2. If ALL 3 return `approve` → `APPROVE`
+3. Otherwise → `COMMENT`
 
 ### 7d: Compile Review Body
 
@@ -548,14 +656,14 @@ Track for the review body:
 [Summary from coverage-and-style reviewer — note: does not affect verdict]
 
 ### Cross-Review Insights
-[Summarize any significant findings from the discussion phase:
+[Summarize significant findings from the discussion phase:
 corroborations, resolved contradictions, escalated issues]
 
 ### Previous Review Follow-up
 **Unresolved threads**: $UNRESOLVED_COUNT
 **Resolved threads**: $RESOLVED_COUNT
-[If $UNRESOLVED_COUNT > 0, list each unresolved thread: `- path/to/file.ext:line — original concern summary`]
-[If $RECURRING_COUNT > 0: "**⚠️ $RECURRING_COUNT finding(s) are recurring** — previously raised and still not addressed."]
+[If $UNRESOLVED_COUNT > 0, list each: `- path/to/file.ext:line — concern summary`]
+[If $RECURRING_COUNT > 0: "**Warning: $RECURRING_COUNT finding(s) are recurring** — previously raised and still not addressed."]
 
 ---
 *Automated review by Claude Code (agent team)*
@@ -567,13 +675,13 @@ corroborations, resolved contradictions, escalated issues]
 
 ### Attempt 1: Direct MCP Post
 
-Use `mcp__github-cli__create_pull_request_review` directly:
+Use `mcp__github-cli__create_pull_request_review`:
 
 ```json
 {
-  "owner": "<owner>",
-  "repo": "<repo>",
-  "pull_number": "<pr_number>",
+  "owner": "$OWNER",
+  "repo": "$REPO",
+  "pull_number": $PR_NUMBER,
   "body": "<compiled review body>",
   "event": "APPROVE|REQUEST_CHANGES|COMMENT",
   "comments": [<merged inline comments>]
@@ -584,28 +692,27 @@ If successful, record: `post_method = "MCP"`, `post_success = true`.
 
 ### Attempt 1 Verification
 
-After a successful MCP post, verify the inline comments were actually stored on GitHub — **do not skip this step**:
+After a successful MCP post, verify inline comments were stored:
 
 ```bash
-gh api "repos/<owner>/<repo>/pulls/<pr_number>/comments" \
+gh api 'repos/$OWNER/$REPO/pulls/$PR_NUMBER/comments' \
   --jq '[.[] | select(.pull_request_review_id == <REVIEW_ID>)] | length'
 ```
 
-- If the returned count equals `len(merged_inline_comments)` → verification passed.
-- If the count is **less than expected**:
-  1. Identify which comments are missing (compare paths/lines against the returned list).
-  2. Append the missing ones to the review body as a follow-up body comment via:
-     ```bash
-     gh pr comment <pr_number> --repo '<owner>/<repo>' --body "$(cat <<'EOF'
-     **Inline comments that failed to attach (line resolution):**
-     - **path/to/file.ext:42** — [Category] Comment body
-     EOF
-     )"
-     ```
-  3. Record: `post_method = "MCP (partial — N comments inlined in body)"`.
-- **NEVER write inline comment content directly in the review body text** as a workaround for posting failures. All inline content must go through the `comments` array or the explicit fallback formats below.
+- Count matches expected → verification passed.
+- Count is **less** → identify missing comments, post as follow-up body comment:
+  ```bash
+  gh pr comment $PR_NUMBER --repo '$OWNER/$REPO' --body "$(cat <<'EOF'
+  **Inline comments that failed to attach (line resolution):**
+  - **path/to/file.ext:42** — [Category] Comment body
+  EOF
+  )"
+  ```
+  Record: `post_method = "MCP (partial — N comments inlined in body)"`.
 
-### Attempt 1b: MCP Retry Without Inline Comments (Line Resolution Fallback)
+**NEVER write inline comment content directly in the review body text** as a workaround for posting failures.
+
+### Attempt 1b: MCP Retry Without Inline Comments
 
 If Attempt 1 fails with an error about invalid line, position, or diff:
 
@@ -622,7 +729,7 @@ If successful, record: `post_method = "MCP (comments inlined)"`, `post_success =
 
 ### Attempt 2: gh CLI Fallback
 
-If MCP fails, fall back to `gh pr review` via Bash:
+If MCP fails entirely:
 
 ```bash
 cat > /tmp/pr-review-body.md <<'REVIEW_EOF'
@@ -634,7 +741,7 @@ cat > /tmp/pr-review-body.md <<'REVIEW_EOF'
 - **path/to/file.ext:42** — [Category] Brief description
 REVIEW_EOF
 
-gh pr review <pr_number> --repo '<owner>/<repo>' --<event_flag> --body-file /tmp/pr-review-body.md
+gh pr review $PR_NUMBER --repo '$OWNER/$REPO' --<event_flag> --body-file /tmp/pr-review-body.md
 rm -f /tmp/pr-review-body.md
 ```
 
@@ -645,20 +752,8 @@ If successful, record: `post_method = "CLI fallback (gh)"`, `post_success = true
 ### Attempt 3: Ask User to Intervene
 
 **Never silently fail.** If both MCP and CLI fail, use `AskUserQuestion`:
-- Which methods failed and their error messages
+- Report which methods failed and their error messages
 - Options: **Retry after I fix auth** | **Post manually** | **Skip posting**
-
----
-
-## Step 8b: Atlassian MCP Fallback Pattern
-
-If any Atlassian MCP call fails (`mcp__plugin_atlassian_*`):
-
-1. Fall back to `acli` CLI:
-   - Jira issue fetch: `acli jira --action getIssue --issue <KEY>`
-   - Jira search: `acli jira --action getIssueList --jql '<JQL>'`
-2. If acli also fails, use `AskUserQuestion`:
-   - Report both failures and offer: **Retry after I fix auth** | **Skip this step** | **Provide data manually**
 
 ---
 
@@ -695,8 +790,7 @@ resolved contradictions]
 **Coverage**: <1-2 sentences>
 
 ### Motivation & Intent Analysis
-[Full narrative from lead's motivation analysis — subjective, for reviewer's
-benefit only, not posted to GitHub]
+[Full narrative from lead's motivation analysis — terminal-only, not posted to GitHub]
 
 ### Filtered Files: <n>
 - <list of auto-excluded files>
@@ -712,7 +806,7 @@ benefit only, not posted to GitHub]
 - Recurring issues: $RECURRING_COUNT (previously flagged, still present)
 
 ### Inline Comments Posted: <n>
-- path/to/file.ts:42 — [Security] ⚠️ Recurring | Brief description
+- path/to/file.ts:42 — [Security] Warning: Recurring | Brief description
 - path/to/file.ts:87 — [Code] Brief description
 ```
 
@@ -720,13 +814,17 @@ benefit only, not posted to GitHub]
 
 ## Step 10: Clean Up the Team
 
-After posting and printing the terminal summary, clean up the team:
+After posting and printing the terminal summary:
 
-1. Ensure all teammates are idle (they should be after the discussion phase)
-2. Ask the lead to clean up: shut down any active teammates first, then delete the team
-3. Remove temp files if any remain
+1. Send shutdown requests to all teammates via `SendMessage`:
+   ```
+   SendMessage(to: "*", message: {type: "shutdown_request"})
+   ```
+2. Wait for shutdown confirmations
+3. Delete the team via `TeamDelete`
+4. Remove temp files if any remain
 
-If teammates are still active, send them a shutdown request. Wait for confirmation before cleaning up.
+If a teammate rejects shutdown or is unresponsive, note it in the output and proceed with cleanup.
 
 ---
 
@@ -739,8 +837,9 @@ If teammates are still active, send them a shutdown request. Wait for confirmati
 - **Never block a PR solely on style or coverage findings**
 - **Motivation & Intent Analysis** is terminal-only — not in the GitHub review body
 - **Never silently fail on posting** — MCP and CLI both fail → ask the user to intervene
-- **Never embed inline comment content in the review body text** — all inline content must go through the `comments` array (Attempt 1), the body fallback list (Attempt 1b), or the verification follow-up comment (Attempt 1 Verification). Writing "### Inline Comments (posted below)" and embedding content in the body without actually posting inline comments is a known failure mode — do not do this.
-- **Post exactly one review** — do not retry `create_pull_request_review` with the same inline comments if the call appears to succeed. Check `post_success` before retrying. Duplicate posts from the same session are a known issue (multiple review IDs with identical content).
-- **Do not re-raise findings already present in `existing_comments`** — if a previous reviewer (including Copilot) raised the same concern and the author responded, the decision was made. The dedup check in Step 7b handles this, but teammates should also apply it before submitting their findings to you.
-- For the cross-review discussion, give teammates reasonable time to respond before synthesizing — don't rush to Step 7 before the discussion produces value
-- The discussion phase is the primary advantage over the single-session review approach — treat it as a first-class step, not an optional one
+- **Never embed inline comment content in the review body text** — all inline content must go through the `comments` array (Attempt 1), the body fallback list (Attempt 1b), or the verification follow-up comment (Attempt 1 Verification)
+- **Post exactly one review** — do not retry `create_pull_request_review` with the same inline comments if the call appears to succeed. Check `post_success` before retrying.
+- **Do not re-raise findings already present in `existing_comments`** — if a previous reviewer raised the same concern and the author responded, the decision was made.
+- For the cross-review discussion, give teammates reasonable time to respond before synthesizing
+- The discussion phase is the primary advantage over single-session review — treat it as a first-class step
+- **tmux panes**: the `teammateMode` setting in `settings.json` controls display. With `"auto"` or `"tmux"`, each teammate gets its own tmux pane when running inside a tmux session. No configuration needed in this skill.
