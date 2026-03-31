@@ -259,9 +259,44 @@ Contents (replace variables with actual values, ensure valid JSON — escape any
 
 **If the write fails:** Log a warning but do not abort — this file is informational, not critical.
 
+### 4.5 Symlink Project Memory
+
+Claude Code stores per-project memory at `~/.claude/projects/<path-key>/memory/`, where `<path-key>` is the absolute project path with `/` replaced by `-` (e.g., `/home/kuda/projects/tsp/alarm-service` → `-home-kuda-projects-tsp-alarm-service`).
+
+Worktrees get a different path key than the source repo, so they start with an empty memory store. Fix this by symlinking the worktree's memory directory to the source repo's memory.
+
+1. **Compute path keys:**
+   ```bash
+   SOURCE_PROJECT_KEY=$(echo "$TOPLEVEL" | sed 's|/|-|g')
+   WORKTREE_PROJECT_KEY=$(echo "$WORKTREE_PATH" | sed 's|/|-|g')
+   ```
+
+2. **Check source memory exists:**
+   ```bash
+   SOURCE_MEMORY="$HOME/.claude/projects/${SOURCE_PROJECT_KEY}/memory"
+   ```
+   If `$SOURCE_MEMORY` does not exist, skip this step — no memory to share yet.
+
+3. **Create worktree project directory and symlink:**
+   ```bash
+   WORKTREE_PROJECT_DIR="$HOME/.claude/projects/${WORKTREE_PROJECT_KEY}"
+   mkdir -p "$WORKTREE_PROJECT_DIR"
+   ln -s "$SOURCE_MEMORY" "$WORKTREE_PROJECT_DIR/memory"
+   ```
+
+4. **Verify:**
+   ```bash
+   ls -la "$WORKTREE_PROJECT_DIR/memory"
+   ```
+   Confirm it's a symlink pointing to the source repo's memory directory.
+
+**If the source repo has no memory directory yet:** Skip silently — memory will be created naturally when the user starts building memories for that repo. Future worktrees will pick it up.
+
+**If the symlink already exists:** Skip — this handles the "Use existing" worktree flow from Step 1.5.
+
 ---
 
-## Step 4.5: Register Task with task-ctl
+## Step 4.6: Register Task with task-ctl
 
 Register this worktree as a tracked task so it survives session crashes and can be resumed later.
 
@@ -413,7 +448,7 @@ module paths, import rules, testing conventions, etc.>
 
 ### 6.3 Link Plan to Task
 
-If task-ctl registration succeeded in Step 4.5, update the task with the plan path:
+If task-ctl registration succeeded in Step 4.6, update the task with the plan path:
 
 ```bash
 task-ctl link-plan "$TICKET_ID" --plan "$WORKTREE_PATH/plans/$TICKET_ID.md"
@@ -444,6 +479,8 @@ Config copied:
   - .env
   - .local
   (list what was actually copied)
+
+Memory:    linked → $SOURCE_MEMORY (or "no source memory found — skipped")
 
 Affected modules:
   - <module 1>
