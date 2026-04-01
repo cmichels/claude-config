@@ -1,5 +1,5 @@
 ---
-description: "Suspend the current task with a context dump for later resumption. Generates a summary of work state, writes .context-dump.md, and calls task-ctl suspend. Usage: /suspend"
+description: "Suspend the current task with a context dump for later resumption. Generates a summary of work state, writes .context-dump.md, and calls task-ctl suspend. Usage: /k-suspend"
 allowed_tools: Read, Glob, Grep, Bash, Write
 ---
 
@@ -11,12 +11,13 @@ Gracefully suspend the current task by generating a context dump and calling tas
 
 ## Step 1: Detect Current Task Context
 
-### 1.1 Find Jira Key
+### 1.1 Find Task Key
 
 Try these sources in order:
 1. **`.jira-context` file** in the repo root — parse JSON for `key` field
-2. **Branch name** — extract from pattern `(feature|bug)/([A-Z]+-\d+)`
-3. **Ask the user** — if neither source works, use output text to ask for the Jira key
+2. **`.task-context` file** in the repo root — parse JSON for `name` field (non-Jira projects)
+3. **Branch name** — extract from pattern `(feature|bug)/([A-Z]+-\d+)`
+4. **Ask the user** — if no source works, use output text to ask for the task key
 
 ```bash
 git rev-parse --show-toplevel
@@ -26,19 +27,23 @@ Store as `$REPO_ROOT`.
 
 Check for `.jira-context`:
 - Use `Read` to read `$REPO_ROOT/.jira-context`
-- Parse JSON to extract `$JIRA_KEY`
+- Parse JSON to extract `$TASK_KEY` from `key` field
 
-If not found, parse branch:
+If not found, check for `.task-context`:
+- Use `Read` to read `$REPO_ROOT/.task-context`
+- Parse JSON to extract `$TASK_KEY` from `name` field
+
+If neither found, parse branch:
 ```bash
 git branch --show-current
 ```
 
-Extract `$JIRA_KEY` from branch name pattern.
+Extract `$TASK_KEY` from branch name pattern.
 
 ### 1.2 Verify Task is Registered
 
 ```bash
-task-ctl show "$JIRA_KEY"
+task-ctl show "$TASK_KEY"
 ```
 
 **If task-ctl is not installed:** Warn the user but continue — the context dump file is still valuable on its own.
@@ -46,7 +51,7 @@ task-ctl show "$JIRA_KEY"
 **If task is not registered:** Warn the user. Offer to register it:
 ```bash
 task-ctl register \
-  --jira "$JIRA_KEY" \
+  --jira "$TASK_KEY" \
   --repo "$(git remote get-url origin | sed 's/.*github.com[:/]\(.*\)\.git/\1/')" \
   --branch "$(git branch --show-current)" \
   --worktree "$REPO_ROOT"
@@ -63,7 +68,7 @@ git diff --cached --name-only
 ```
 
 Also check for a plan file:
-- Use `Glob` to find `$REPO_ROOT/plans/$JIRA_KEY.md`
+- Use `Glob` to find `$REPO_ROOT/plans/$TASK_KEY.md`
 
 If found, use `Read` to read the plan and identify:
 - Which items are checked (completed)
@@ -90,9 +95,9 @@ Review:
 Use the **Write tool** (NOT Bash heredoc) to create `$REPO_ROOT/.context-dump.md`:
 
 ```markdown
-# Context Dump: $JIRA_KEY
+# Context Dump: $TASK_KEY
 ## Generated: <current ISO 8601 timestamp>
-## Plan: plans/$JIRA_KEY.md
+## Plan: plans/$TASK_KEY.md
 
 ## Status at Suspend
 <1-2 sentences: what was actively being worked on when suspend was called>
@@ -127,7 +132,7 @@ Use the **Write tool** (NOT Bash heredoc) to create `$REPO_ROOT/.context-dump.md
 ## Step 3: Call task-ctl suspend
 
 ```bash
-task-ctl suspend "$JIRA_KEY" --context-file "$REPO_ROOT/.context-dump.md"
+task-ctl suspend "$TASK_KEY" --context-file "$REPO_ROOT/.context-dump.md"
 ```
 
 This will:
@@ -147,15 +152,15 @@ This will:
 Display the suspension summary:
 
 ```
-Task Suspended: $JIRA_KEY
+Task Suspended: $TASK_KEY
 
 Context dump:  $REPO_ROOT/.context-dump.md
-Plan:          $REPO_ROOT/plans/$JIRA_KEY.md (if exists)
+Plan:          $REPO_ROOT/plans/$TASK_KEY.md (if exists)
 Git state:     X dirty, Y ahead, Z behind
 Status:        suspended
 
 To resume later:
-  task-ctl resume $JIRA_KEY
+  task-ctl resume $TASK_KEY
 
 Or from pr-monitor: select task and press Enter
 ```
@@ -164,7 +169,7 @@ Or from pr-monitor: select task and press Enter
 
 ## Error Handling
 
-- **No .jira-context and can't parse branch:** Ask user for the Jira key
+- **No .jira-context/.task-context and can't parse branch:** Ask user for the task key
 - **task-ctl not installed:** Generate context dump anyway, warn about manual tracking
 - **Not in a git repo:** STOP — nothing to suspend
 - **Task not registered:** Offer to register, then suspend

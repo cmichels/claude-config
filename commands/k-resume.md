@@ -1,5 +1,5 @@
 ---
-description: "Resume a suspended task with full context restoration. Reads the plan and context dump, then continues where you left off. Usage: /resume [JIRA-KEY]"
+description: "Resume a suspended task with full context restoration. Reads the plan and context dump, then continues where you left off. Usage: /k-resume [JIRA-KEY]"
 allowed_tools: Read, Glob, Grep, Bash
 ---
 
@@ -11,19 +11,20 @@ Resume a previously suspended task by loading the plan and context dump, then co
 
 ## Step 1: Identify the Task
 
-### 1.1 Determine Jira Key
+### 1.1 Determine Task Key
 
 Check sources in order:
 
-1. **Argument provided** — if `$ARGUMENTS` is a valid Jira key (`[A-Z]+-\d+`), use it directly as `$JIRA_KEY`
+1. **Argument provided** — if `$ARGUMENTS` is a valid Jira key (`[A-Z]+-\d+`) or task name, use it directly as `$TASK_KEY`
 2. **`.jira-context` file** — if already in a worktree, read `$REPO_ROOT/.jira-context` for the `key` field
-3. **Branch name** — extract from pattern `(feature|bug)/([A-Z]+-\d+)`
-4. **List available tasks** — run `task-ctl list` and show the user what's available to resume
+3. **`.task-context` file** — read `$REPO_ROOT/.task-context` for the `name` field (non-Jira projects)
+4. **Branch name** — extract from pattern `(feature|bug)/([A-Z]+-\d+)`
+5. **List available tasks** — run `task-ctl list` and show the user what's available to resume
 
 ### 1.2 Get Task Details
 
 ```bash
-task-ctl show "$JIRA_KEY"
+task-ctl show "$TASK_KEY"
 ```
 
 Extract:
@@ -42,7 +43,7 @@ Extract:
 
 ### 2.1 Read the Plan File
 
-If `$PLAN_PATH` exists (or check `plans/$JIRA_KEY.md` by convention):
+If `$PLAN_PATH` exists (or check `plans/$TASK_KEY.md` by convention):
 
 Use `Read` to load the plan. Identify:
 - Checked items (completed work)
@@ -81,7 +82,7 @@ Understand what's on disk vs what the context dump says.
 If task-ctl is available and the task was suspended:
 
 ```bash
-task-ctl resume "$JIRA_KEY"
+task-ctl resume "$TASK_KEY"
 ```
 
 **Note:** If already in the worktree's tmux window (e.g., user manually opened it), task-ctl resume may fail because the task is already active. This is fine — proceed with context restoration.
@@ -93,7 +94,7 @@ task-ctl resume "$JIRA_KEY"
 Synthesize the plan and context dump into a clear status report:
 
 ```
-Resuming: $JIRA_KEY — $JIRA_SUMMARY
+Resuming: $TASK_KEY — $JIRA_SUMMARY
 
 Last active: <timestamp from context dump>
 
@@ -125,7 +126,7 @@ If the context dump is missing (crash recovery scenario), say so clearly:
 ```
 No context dump found — this task may have been interrupted without a graceful suspend.
 
-Reading the plan at plans/$JIRA_KEY.md for context...
+Reading the plan at plans/$TASK_KEY.md for context...
 
 <plan summary with checked/unchecked items>
 
