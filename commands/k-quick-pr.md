@@ -54,6 +54,10 @@ gh pr view $PR_NUMBER --json title,body,baseRefName,headRefName,files,additions,
 
 # Diff against base
 gh pr diff $PR_NUMBER
+
+# Existing reviews and inline comments
+REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
+gh api "repos/$REPO/pulls/$PR_NUMBER/comments" --paginate
 ```
 
 Store:
@@ -61,6 +65,7 @@ Store:
 - `$FILES[]` — changed files with change types
 - `$DIFF` — the full diff
 - `$ADDITIONS`, `$DELETIONS`, `$CHANGED_FILES`
+- `$EXISTING_COMMENTS[]` — inline review comments already posted (path, line, body)
 
 ### Complexity Gate
 
@@ -103,6 +108,18 @@ For each finding, record:
 - `$FINDING.blocking` — true/false
 
 **Speed rule:** For a 1-file tag bump, the diff alone is sufficient context. Don't read surrounding files unless the diff is ambiguous. Read the minimum needed.
+
+### Dedup Against Existing Comments
+
+Before finalizing findings, compare each one against `$EXISTING_COMMENTS[]`:
+
+- **Same file + line within 3 lines + same issue:** Drop the finding. It's already been said.
+- **Same file + same issue but different line:** Drop it. The reviewer covered it.
+- **Same general concern but different file:** Keep it — each file gets its own comment.
+
+If a finding is dropped, do not mention it in the review body or as an inline comment. It doesn't exist as far as your review is concerned.
+
+If ALL findings (blocking and soft) are already covered by existing comments, post a clean APPROVE with a summary only — no redundant notes.
 
 ---
 
