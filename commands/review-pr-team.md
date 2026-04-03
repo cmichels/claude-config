@@ -560,15 +560,17 @@ Before finalizing each finding, check these:
 
 After spawning the team, monitor progress:
 
-1. Periodically check task status with `TaskList` to see which initial reviews are complete
-2. If a reviewer appears stuck (task in-progress for an unusually long time), send a nudge via `SendMessage`: "Check in — how is your review progressing? Let me know if you're blocked."
-3. As findings arrive from teammates, acknowledge receipt and note cross-domain patterns
+1. Check task status with `TaskList` every 60 seconds to see which initial reviews are complete
+2. If a reviewer's task has been `in_progress` for more than 3 minutes without a message to the lead, send a targeted nudge via `SendMessage`: "Check in — your initial review task is still in progress. Share findings when ready, or let me know if you're blocked."
+3. If a reviewer hasn't responded within 2 minutes after the nudge, send a final nudge: "Final check — wrapping up initial reviews. Send your findings now or I'll proceed without them."
+4. If still no response after 1 more minute, mark that reviewer as `unresponsive` and proceed. Note the gap in the synthesis.
+5. As findings arrive from teammates, acknowledge receipt and note cross-domain patterns
 
-Wait until all 4 initial review tasks (1-4) are marked complete before proceeding.
+Wait until all 4 initial review tasks (1-4) are marked complete OR all unresponsive reviewers are accounted for before proceeding.
 
 ### 6b: Cross-Review Discussion Phase
 
-Once all initial reviews are complete, unblock task 5 and broadcast the discussion prompt to all teammates via `SendMessage` with `to: "*"`:
+Once all initial reviews are complete (or unresponsive reviewers accounted for), unblock task 5 and broadcast the discussion prompt to all teammates via `SendMessage` with `to: "*"`:
 
 ```
 All initial reviews are complete. This is the cross-review discussion phase.
@@ -584,12 +586,26 @@ All initial reviews are complete. This is the cross-review discussion phase.
 Reply with your top 3 findings and any cross-domain flags. Then go idle.
 ```
 
-Allow teammates to exchange messages. Read the discussion as it develops. After all teammates have responded and gone idle, mark task 5 complete.
+### 6c: Cross-Review Timeout & Retry Protocol
+
+After broadcasting, track responses from each teammate individually:
+
+1. **First check (60 seconds):** Check which teammates have responded. For any that haven't, send a direct nudge via `SendMessage` to each non-responsive teammate by name: "Cross-review discussion is active — share your top 3 findings now."
+2. **Second check (60 seconds after first nudge):** If a teammate still hasn't responded, send a final message: "Last call for cross-review input. Proceeding to synthesis in 30 seconds."
+3. **Cutoff (30 seconds after final message):** Proceed to synthesis with whatever input has been received. Track non-responsive teammates as `$CROSS_REVIEW_GAPS[]`.
+
+If any teammates are in `$CROSS_REVIEW_GAPS[]`:
+- Note their absence in the synthesis: "Cross-review input missing from: [names]. Synthesis based on their initial findings only."
+- Their initial review findings are still included in the final review — only the cross-domain discussion is missing.
+
+### 6d: Evaluate Discussion
 
 Key things to watch for:
 - **Corroboration**: multiple reviewers flagging the same file/module independently — escalate priority
 - **Contradiction**: one reviewer flags a pattern another recognizes as intentional — investigate and resolve
 - **Escalation**: a security finding with a confirmed test coverage gap — these become higher priority
+
+After all responsive teammates have gone idle (or cutoff reached), mark task 5 complete.
 
 ---
 

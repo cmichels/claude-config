@@ -63,6 +63,7 @@
 
 ## Tool Reliability
 - When any MCP tool (especially Atlassian/Jira) hangs or becomes unresponsive for more than 30 seconds, immediately abandon it and fall back to CLI equivalents (`gh` for GitHub, `acli` for Jira). Do not retry the MCP tool more than once. Do not wait for user intervention.
+- When PR data is needed and Jira remote links don't have it, fall back to GitHub: `gh pr list --head <branch>` or `gh pr view` by branch name or ticket ID. Don't give up on finding PR data just because Jira didn't have the link.
 
 ## Implementation Approach
 - Before implementing non-trivial changes (multi-file edits, refactors, bug fixes), briefly outline your approach in 3-5 bullet points and wait for confirmation. Include: which files you'll modify, what the key changes are, and any assumptions. Skip this for single-file edits or changes explicitly described by the user.
@@ -71,6 +72,7 @@
 - Do exactly what was asked. Not what "might also be useful." Not what "would be better while we're in here." The thing. Only the thing.
 - Before starting work on config, environment, or platform tasks: validate that the intended approach will actually work in this environment (WSL2, symlinks, shell aliases). Spend 30 seconds checking feasibility before spending 10 minutes on a dead end.
 - If the first approach fails, STOP. Do not silently pivot to a different strategy. State what failed, why, and propose the alternative. Let the user decide.
+- When a tool, command, or approach fails 2-3 times, STOP. Do not keep grinding. State what you tried, why it's not working, and propose 2 alternative approaches with tradeoffs. The user decides which path to take — do not pick one and keep going.
 - Never broaden scope mid-task. If you discover something adjacent that needs fixing, mention it — don't fix it. Finish the original ask first.
 
 ## Code Review

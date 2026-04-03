@@ -60,7 +60,7 @@ echo ""
 echo "--- BASH COMMANDS USED ---"
 echo ""
 
-grep '^Bash' "$LOGFILE" | awk -F'\t' '{print $2}' | sort -u | while read -r cmd; do
+grep -a '^Bash' "$LOGFILE" | awk -F'\t' '{print $2}' | sort -u | while read -r cmd; do
   echo "  $cmd"
 done
 echo ""
@@ -69,7 +69,7 @@ echo ""
 echo "--- NON-BASH TOOLS USED ---"
 echo ""
 
-grep -v '^Bash' "$LOGFILE" | awk -F'\t' '$1 != "" {print $1}' | sort -u | while read -r tool; do
+grep -av '^Bash' "$LOGFILE" | awk -F'\t' '$1 != "" {print $1}' | sort -u | while read -r tool; do
   echo "  $tool"
 done
 echo ""
@@ -79,7 +79,7 @@ echo "--- SUGGESTED --allowedTools ---"
 echo ""
 
 # Bash patterns: group by first two words, add wildcard
-bash_patterns=$(grep '^Bash' "$LOGFILE" | awk -F'\t' '{print $2}' | \
+bash_patterns=$(grep -a '^Bash' "$LOGFILE" | awk -F'\t' '{print $2}' | \
   awk '{
     # For git/gh commands, use first 2-3 words as pattern
     if ($1 == "git" || $1 == "gh") {
@@ -95,7 +95,7 @@ bash_patterns=$(grep '^Bash' "$LOGFILE" | awk -F'\t' '{print $2}' | \
     }
   }' | sort -u)
 
-non_bash=$(grep -v '^Bash' "$LOGFILE" | awk -F'\t' '$1 != "" {print $1}' | sort -u)
+non_bash=$(grep -av '^Bash' "$LOGFILE" | awk -F'\t' '$1 != "" {print $1}' | sort -u)
 
 echo "# Paste into your launcher script's --allowedTools:"
 echo "claude --allowedTools \\"
@@ -147,7 +147,7 @@ if [ -f "$SETTINGS" ]; then
   done <<< "$non_bash"
 
   # Check bash patterns
-  grep '^Bash' "$LOGFILE" | awk -F'\t' '{print $2}' | sort -u | while read -r cmd; do
+  grep -a '^Bash' "$LOGFILE" | awk -F'\t' '{print $2}' | sort -u | while read -r cmd; do
     # Strip leading/trailing quotes that Claude Code may wrap around arguments
     normalized="${cmd#\"}"
     normalized="${normalized%\"}"
