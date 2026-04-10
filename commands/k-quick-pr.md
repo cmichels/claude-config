@@ -15,36 +15,11 @@ Extract `$PR_NUMBER` from `$ARGUMENTS` (first positional argument, numeric).
 
 If missing or non-numeric: "Usage: `/k-quick-pr <PR_NUMBER>`" — STOP.
 
----
-
-## Step 1: Save State & Checkout
-
-Record current state and switch to the PR branch:
-
-```bash
-ORIGINAL_BRANCH=$(git branch --show-current)
-```
-
-Check if the working tree is dirty:
-```bash
-git status --porcelain
-```
-
-If dirty, stash:
-```bash
-git stash --include-untracked -m "k-quick-pr: auto-stash before reviewing PR #$PR_NUMBER"
-```
-
-Store `$ORIGINAL_BRANCH` and `$STASHED` (true/false).
-
-Fetch and checkout the PR branch:
-```bash
-gh pr checkout $PR_NUMBER
-```
+**Assumption:** The pr-monitor has already checked out the correct branch. Do NOT stash, checkout, or switch branches.
 
 ---
 
-## Step 2: Gather Context
+## Step 1: Gather Context
 
 Run these in parallel:
 
@@ -74,11 +49,11 @@ If the PR exceeds any of these thresholds, it's too complex for a quick review:
 - More than 500 additions
 - Touches CI/CD workflows AND application code in the same PR
 
-If tripped: inform the user this PR needs `/review-pr-team` instead. Restore state (Step 5) and STOP.
+If tripped: inform the user this PR needs `/review-pr-team` instead. STOP.
 
 ---
 
-## Step 3: Fast Checklist
+## Step 2: Fast Checklist
 
 Single pass over the diff. Check ONLY these items:
 
@@ -123,7 +98,7 @@ If ALL findings (blocking and soft) are already covered by existing comments, po
 
 ---
 
-## Step 4: Post Review
+## Step 3: Post Review
 
 ### Determine repo identity
 
@@ -188,24 +163,7 @@ Issues:
 
 ---
 
-## Step 5: Restore State
-
-Always run this, even on errors:
-
-```bash
-git checkout $ORIGINAL_BRANCH
-```
-
-If `$STASHED` is true:
-```bash
-git stash pop
-```
-
-If stash pop conflicts, inform the user their stash is saved as `k-quick-pr: auto-stash before reviewing PR #$PR_NUMBER` and they can resolve manually.
-
----
-
-## Step 6: Report
+## Step 4: Report
 
 Brief conversation summary:
 
@@ -233,10 +191,8 @@ Brief conversation summary:
 
 ## Error Handling
 
-- **PR not found:** Inform user, restore state. STOP.
-- **Checkout fails:** Inform user, pop stash if needed. STOP.
+- **PR not found:** Inform user. STOP.
 - **Review post fails via `gh pr review`:** Fall back to `gh api`. If both fail, print the review in the conversation for manual posting.
-- **Stash pop conflicts:** Inform user with the stash name so they can resolve.
 
 ## Rules
 
