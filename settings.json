@@ -322,6 +322,11 @@
             "type": "command",
             "command": "[ ! -f /tmp/claude-audit-enabled ] && exit 0; input=$(cat); tool=$(echo \"$input\" | jq -r '.tool_name'); detail=$(echo \"$input\" | jq -r '.tool_input | (.command // .file_path // .skill // .query // .issueIdOrKey // \"—\")' 2>/dev/null); echo \"${tool}\t${detail}\" >> /tmp/claude-permission-audit.log; exit 0",
             "statusMessage": "Auditing tool use"
+          },
+          {
+            "type": "command",
+            "command": "~/bin/claude-preflight.sh --once 2>&1",
+            "statusMessage": "Environment preflight check"
           }
         ]
       },
