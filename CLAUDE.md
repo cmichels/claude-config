@@ -64,6 +64,7 @@
 ## Tool Reliability
 - When any MCP tool (especially Atlassian/Jira) hangs or becomes unresponsive for more than 30 seconds, immediately abandon it and fall back to CLI equivalents (`gh` for GitHub, `acli` for Jira). Do not retry the MCP tool more than once. Do not wait for user intervention.
 - When PR data is needed and Jira remote links don't have it, fall back to GitHub: `gh pr list --head <branch>` or `gh pr view` by branch name or ticket ID. Don't give up on finding PR data just because Jira didn't have the link.
+- When Jira API returns partial failures (404s, missing fields like sprint, unsupported parameters), don't retry the same call — switch strategies: use board API for sprint data, use ticket links instead of remote links, and inform the user of the fallback rather than blocking.
 
 ## Implementation Approach
 - Before implementing non-trivial changes (multi-file edits, refactors, bug fixes), briefly outline your approach in 3-5 bullet points and wait for confirmation. Include: which files you'll modify, what the key changes are, and any assumptions. Skip this for single-file edits or changes explicitly described by the user.

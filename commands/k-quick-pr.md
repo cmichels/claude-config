@@ -19,6 +19,21 @@ If missing or non-numeric: "Usage: `/k-quick-pr <PR_NUMBER>`" — STOP.
 
 ---
 
+## Step 0.5: Sync Remote Refs
+
+Fetch the latest remote state (fetch only — do NOT reset, checkout, or modify the working tree):
+
+```bash
+git fetch origin
+```
+
+Verify the local branch matches the remote PR head. If behind:
+- Warn: "Local branch is N commits behind remote. Reading diff from GitHub API (not local files)."
+- Prefer `gh pr diff` over local `git diff` for all comparisons.
+- When reading files for context, prefer `gh api` or `git show origin/$HEAD_BRANCH:path/to/file` over local `Read` if the branch is stale.
+
+---
+
 ## Step 1: Gather Context
 
 Run these in parallel:

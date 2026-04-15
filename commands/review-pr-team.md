@@ -294,7 +294,7 @@ Before finalizing each finding, check these:
 2. Read `~/.claude/review-guidelines.md` — focus on Security and Error Handling domain sections
 3. Run `git diff $BASE_BRANCH..HEAD` and review thoroughly for your domain
 4. Fetch additional context with Read/Grep as needed (auth flows, error propagation paths)
-5. Mark task 1 complete and message the lead with findings:
+5. Send findings to the lead via SendMessage FIRST — do not mark the task complete until delivery is confirmed:
 
 {
   "domain": "security-and-errors",
@@ -310,7 +310,8 @@ Before finalizing each finding, check these:
   ]
 }
 
-6. After sending findings, await the cross-review discussion (task 5). Share your top 3 most critical findings with the full team. If security findings have implications for test coverage or architecture, message those reviewers directly by name.
+6. After confirming SendMessage delivery, mark task 1 complete.
+7. Await the cross-review discussion (task 5). Share your top 3 most critical findings with the full team. If security findings have implications for test coverage or architecture, message those reviewers directly by name.
 ```
 
 ---
@@ -373,7 +374,7 @@ Before finalizing each finding, check these:
 2. Read `~/.claude/review-guidelines.md` — focus on Bug Detection & Code Quality domain section and Cross-Domain Insights (especially Copilot dedup)
 3. Read CLAUDE.md to check for explicit project rules
 4. Run `git diff $BASE_BRANCH..HEAD` and review for correctness, bugs, and compliance
-5. Mark task 2 complete and message the lead with findings:
+5. Send findings to the lead via SendMessage FIRST — do not mark the task complete until delivery is confirmed:
 
 {
   "domain": "code-quality",
@@ -388,7 +389,8 @@ Before finalizing each finding, check these:
   ]
 }
 
-6. After sending findings, await the cross-review discussion (task 5). Share your top 3 findings. If you see code quality issues with security implications (null check missing on user input) or architecture implications (duplicated business logic), message those reviewers directly by name.
+6. After confirming SendMessage delivery, mark task 2 complete.
+7. Await the cross-review discussion (task 5). Share your top 3 findings. If you see code quality issues with security implications (null check missing on user input) or architecture implications (duplicated business logic), message those reviewers directly by name.
 ```
 
 ---
@@ -452,7 +454,7 @@ Before finalizing each finding, check these:
 2. Read `~/.claude/review-guidelines.md` — focus on Architecture & Design domain section and Cross-Domain Insights
 3. Run `git diff $BASE_BRANCH..HEAD` and review for architectural concerns
 4. Explore surrounding code with Read/Grep to understand broader system design
-5. Mark task 3 complete and message the lead with findings:
+5. Send findings to the lead via SendMessage FIRST — do not mark the task complete until delivery is confirmed:
 
 {
   "domain": "architecture",
@@ -468,7 +470,8 @@ Before finalizing each finding, check these:
   ]
 }
 
-6. After sending findings, await the cross-review discussion (task 5). Share your top 3 findings. If architectural issues have security or code quality implications, flag them to the relevant reviewers directly by name.
+6. After confirming SendMessage delivery, mark task 3 complete.
+7. Await the cross-review discussion (task 5). Share your top 3 findings. If architectural issues have security or code quality implications, flag them to the relevant reviewers directly by name.
 ```
 
 ---
@@ -533,7 +536,7 @@ Before finalizing each finding, check these:
 2. Read `~/.claude/review-guidelines.md` — focus on Test Coverage and Style & Conventions domain sections
 3. Run `git diff $BASE_BRANCH..HEAD` — check test files for coverage gaps and non-test files for untested paths
 4. Explore existing test files with Glob/Read to understand testing patterns
-5. Mark task 4 complete and message the lead with findings:
+5. Send findings to the lead via SendMessage FIRST — do not mark the task complete until delivery is confirmed:
 
 {
   "domain": "coverage-and-style",
@@ -549,7 +552,8 @@ Before finalizing each finding, check these:
   ]
 }
 
-6. After sending findings, await the cross-review discussion (task 5). Share your top 3 coverage gaps. If the security reviewer flagged a vulnerability, proactively check whether there are tests covering that failure path and report back to them directly.
+6. After confirming SendMessage delivery, mark task 4 complete.
+7. Await the cross-review discussion (task 5). Share your top 3 coverage gaps. If the security reviewer flagged a vulnerability, proactively check whether there are tests covering that failure path and report back to them directly.
 ```
 
 ---
