@@ -403,5 +403,6 @@
   "alwaysThinkingEnabled": true,
   "effortLevel": "high",
   "autoMemoryEnabled": true,
+  "useAutoModeDuringPlan": true,
   "teammateMode": "auto"
 }
