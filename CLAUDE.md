@@ -1,5 +1,7 @@
 # Claude Code - User Notes
 
+**Note:** These rules bias toward caution over speed. For trivial tasks, use judgment — per-rule escapes still apply.
+
 ## Environment
 - OS: WSL2 (Ubuntu) on Windows
 - IDE: nvim
@@ -82,7 +84,11 @@
 - Orphan cleanup rule: remove imports/variables/functions that YOUR changes made unused. Don't remove pre-existing dead code unless asked.
 - Traceability test: every changed line should trace directly to the user's request. If it doesn't, justify it or cut it.
 
-### Quality gate
+### Simplicity
+- No abstractions for single-use code. Three similar lines beats a premature helper.
+- No "flexibility" or "configurability" that wasn't asked for. You are not building a library.
+- No error handling for impossible scenarios. Trust internal code and framework guarantees — validate only at system boundaries (user input, external APIs).
+- If you write 200 lines and it could be 50, rewrite it before shipping.
 - Simplicity test: before shipping, ask "would a senior engineer say this is overcomplicated?" If yes, simplify before proceeding.
 
 ## Code Review
