@@ -52,3 +52,6 @@ reviews/
 # OS junk
 .DS_Store
 ._*
+
+# Reference/source material (not part of active config)
+CLAUDE_andy.md
