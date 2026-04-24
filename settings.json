@@ -62,6 +62,7 @@
       "Bash(go vet*)",
       "Bash(go test*)",
       "Bash(go mod tidy*)",
+      "Bash(go get*)",
       "Bash(git fetch*)",
       "Bash(git -C * fetch*)",
       "Bash(git -C * add *)",
@@ -403,6 +404,11 @@
   "alwaysThinkingEnabled": true,
   "effortLevel": "high",
   "autoMemoryEnabled": true,
+  "teammateMode": "auto",
   "useAutoModeDuringPlan": true,
-  "teammateMode": "auto"
+  "editorMode": "vim",
+  "verbose": true,
+  "autoCompactEnabled": false,
+  "fileCheckpointingEnabled": false,
+  "remoteControlAtStartup": false
 }
