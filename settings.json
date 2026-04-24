@@ -62,6 +62,7 @@
       "Bash(go vet*)",
       "Bash(go test*)",
       "Bash(go mod tidy*)",
+      "Bash(go mod *)",
       "Bash(go get*)",
       "Bash(git fetch*)",
       "Bash(git -C * fetch*)",
