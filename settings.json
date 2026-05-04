@@ -118,7 +118,7 @@
       "Bash(gh api user*)",
       "Bash(gh api repos/*/contents/*)",
       "Bash(gh api repos/*/issues*)",
-      "Bash(gh search code*)",
+      "Bash(gh search*)",
       "Bash(gh gpg-key list*)",
       "Bash(/home/kuda/.claude/bin/*)",
       "Bash(ls -d /home/kuda/projects/optelligent/*)",
