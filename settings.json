@@ -25,6 +25,7 @@
       "WebSearch",
       "Write(/home/kuda/projects/optelligent/*/.jira-context)",
       "Write(../*/.jira-context)",
+      "Read(../optelligent/**)",
       "Bash(cat*)",
       "Bash(head*)",
       "Bash(tail*)",
