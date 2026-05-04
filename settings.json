@@ -264,6 +264,7 @@
       "Bash(bash -n *)",
       "Bash(shellcheck *)",
       "Bash(golangci-lint run*)",
+      "Bash(actionlint*)",
       "Bash(helm repo *)",
       "mcp__plugin_atlassian_atlassian__searchAtlassian",
       "mcp__plugin_atlassian_atlassian__getJiraIssue",
