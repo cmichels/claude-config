@@ -267,6 +267,7 @@
       "Bash(shellcheck *)",
       "Bash(golangci-lint*)",
       "Bash(actionlint*)",
+      "Bash(yamllint*)",
       "Bash(helm repo *)",
       "mcp__plugin_atlassian_atlassian__searchAtlassian",
       "mcp__plugin_atlassian_atlassian__getJiraIssue",
@@ -322,7 +323,6 @@
     ],
     "defaultMode": "default"
   },
-  "model": "opus[1m]",
   "hooks": {
     "PreToolUse": [
       {
@@ -413,11 +413,12 @@
   "alwaysThinkingEnabled": true,
   "effortLevel": "high",
   "autoMemoryEnabled": true,
-  "teammateMode": "auto",
-  "useAutoModeDuringPlan": true,
   "editorMode": "vim",
   "verbose": true,
   "autoCompactEnabled": false,
   "fileCheckpointingEnabled": false,
-  "remoteControlAtStartup": false
+  "teammateMode": "auto",
+  "remoteControlAtStartup": false,
+  "useAutoModeDuringPlan": true,
+  "model": "opus[1m]"
 }
