@@ -712,6 +712,11 @@ corroborations, resolved contradictions, escalated issues]
 
 ## Step 8: Post to GitHub
 
+**Posting rules** (apply to all attempts):
+- **Never modify the review content during posting** — post exactly what synthesis produced. Don't reshape, condense, or "fix" comments at posting time.
+- **Do not retry the same method unprompted** — try Attempt 1 once, Attempt 2 once, then escalate. No silent loops.
+- **Preserve markdown formatting** through both posting paths — code blocks, lists, headings, and links must survive the comments-inlined retry.
+
 ### Attempt 1: Post the full review payload via gh api
 
 Post body, verdict, and inline comments in a single call:
@@ -794,7 +799,10 @@ If successful, record: `post_method = "gh api (comments inlined)"`, `post_succes
 
 **Never silently fail.** If both attempts fail, use `AskUserQuestion`:
 - Report which attempts failed and their error messages
-- Options: **Retry after I fix auth** (user runs `gh auth login`) | **Post manually** | **Skip posting**
+- Options:
+  - **Retry after I fix auth** — user runs `gh auth login`, then retry from Attempt 1
+  - **Post manually** — output the full review body and inline comments to the terminal for the user to copy and post
+  - **Skip posting** — return failure so the caller can handle it
 
 ---
 
