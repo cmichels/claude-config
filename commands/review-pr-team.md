@@ -299,12 +299,15 @@ Before finalizing each finding, check these:
 
 {
   "domain": "security-and-errors",
-  "summary": "1-2 sentence summary of security posture",
+  "summary": "Security and error-handling assessment (2-3 sentences)",
   "severity": "approve|request_changes|comment",
-  "risk_level": "LOW|MEDIUM|HIGH|CRITICAL",
+  "risk_level": "critical|high|medium|low|none",
   "findings": {
     "critical": ["finding description with file:line"],
-    "important": ["finding description with file:line"]
+    "high": ["finding description with file:line"],
+    "medium": ["finding description with file:line"],
+    "low": ["finding description with file:line"],
+    "informational": ["finding description with file:line"]
   },
   "comments": [
     {"path": "file.go", "line": 42, "body": "comment text", "category": "security|error-handling", "recurring": false}
