@@ -468,15 +468,20 @@ Before finalizing each finding, check these:
 
 {
   "domain": "architecture",
-  "summary": "1-2 sentence summary of architectural impact",
+  "summary": "Architecture and design assessment (2-3 sentences)",
   "severity": "approve|request_changes|comment",
-  "architecture_impact": "NONE|LOW|MEDIUM|HIGH",
+  "architecture_impact": "high|medium|low|none",
   "findings": {
     "critical": ["finding description with file:line"],
-    "important": ["finding description with file:line"]
+    "high": ["finding description with file:line"],
+    "medium": ["finding description with file:line"],
+    "low": ["finding description with file:line"],
+    "informational": ["finding description with file:line"]
   },
+  "positives": ["Good architectural decisions observed"],
+  "questions": ["Tradeoff-aware asks for the author"],
   "comments": [
-    {"path": "file.go", "line": 42, "body": "comment text", "category": "coupling|api-design|patterns|scalability|debt", "recurring": false}
+    {"path": "file.go", "line": 42, "body": "comment text", "category": "patterns|coupling|api-design|scalability|debt|data-model|integration", "recurring": false}
   ]
 }
 
