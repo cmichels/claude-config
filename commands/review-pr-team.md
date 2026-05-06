@@ -556,12 +556,16 @@ Before finalizing each finding, check these:
 
 {
   "domain": "coverage-and-style",
-  "summary": "1-2 sentence summary of test coverage and style",
+  "summary": "Coverage and style assessment (2-3 sentences)",
   "severity": "approve|comment",
-  "coverage_assessment": "ADEQUATE|GAPS|INSUFFICIENT",
+  "coverage_assessment": "adequate|gaps|insufficient",
+  "consistency_score": "high|medium|low",
   "findings": {
-    "coverage_gaps": ["untested path description with file:line"],
-    "style": ["style issue with file:line"]
+    "critical": ["finding description with file:line"],
+    "high": ["finding description with file:line"],
+    "medium": ["finding description with file:line"],
+    "low": ["finding description with file:line"],
+    "informational": ["finding description with file:line"]
   },
   "comments": [
     {"path": "file.go", "line": 42, "body": "comment text", "category": "coverage|style", "recurring": false}
