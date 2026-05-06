@@ -1,0 +1,4 @@
+{
+  "name": "claude-config",
+  "summary": "Claude Code configuration, agents, hooks, and skills"
+}
