@@ -1,6 +1,6 @@
 ---
 description: "Set up a git worktree for a Jira ticket with full pipeline: worktree creation, config copy, Jira fetch, codebase analysis, and plan generation. Usage: /worktree <TICKET-ID>"
-allowed_tools: Read, Glob, Grep, Bash, Task, AskUserQuestion, mcp__plugin_atlassian_atlassian__getJiraIssue, mcp__plugin_atlassian_atlassian__searchJiraIssuesUsingJql, mcp__plugin_atlassian_atlassian__getAccessibleAtlassianResources, mcp__plugin_atlassian_atlassian__search
+allowed_tools: Read, Glob, Grep, Bash, Task, AskUserQuestion
 ---
 
 # Worktree Setup Command
@@ -82,57 +82,33 @@ We fetch the Jira ticket **first** so we can derive a proper branch name from th
 
 ### 2.1 Check Jira Connectivity
 
-**Try MCP first:**
-```
-mcp__plugin_atlassian_atlassian__getAccessibleAtlassianResources()
-```
-
-Store the cloudId. Set `$JIRA_MODE = "mcp"`.
-
-**If MCP fails:** Fall back to acli CLI.
 ```bash
-acli jira --action getIssue --issue "$TICKET_ID" 2>/dev/null
+acli jira auth status 2>&1
 ```
 
-**If acli succeeds:** Set `$JIRA_MODE = "acli"` and inform user.
-
-**If both fail:** STOP and inform user:
+**If acli fails:** STOP and inform user:
 ```
-Jira connectivity failed via both MCP and acli CLI.
-
-MCP setup:
-  claude mcp add --transport sse atlassian https://mcp.atlassian.com/v1/sse
+Jira connectivity failed.
 
 acli setup:
-  brew install atlassian-cli
-  acli auth
-
-Run `/mcp` to check your MCP server status.
+  ~/projects/personal/claude-config/install-acli.sh
+  acli jira auth login --site starktechgroup.atlassian.net
 ```
 
 ### 2.2 Fetch Ticket Details
 
-**If `$JIRA_MODE = "mcp"`:**
-```
-mcp__plugin_atlassian_atlassian__getJiraIssue(
-  cloudId: "$CLOUD_ID",
-  issueIdOrKey: "$TICKET_ID"
-)
-```
-
-**If `$JIRA_MODE = "acli"`:**
 ```bash
-acli jira --action getIssue --issue "$TICKET_ID"
+acli jira workitem view "$TICKET_ID" --json --fields "*all"
 ```
 
-Extract and store:
-- `$JIRA_SUMMARY` — ticket title/summary
-- `$JIRA_DESCRIPTION` — full description
-- `$JIRA_TYPE` — issue type (Story, Bug, Task, etc.)
-- `$JIRA_PRIORITY` — priority level
-- `$JIRA_ACCEPTANCE` — acceptance criteria (if present)
-- `$JIRA_LABELS` — any labels on the ticket
-- `$JIRA_PARENT` — parent epic or story (if subtask)
+Extract and store via jq from the JSON output:
+- `$JIRA_SUMMARY` — `.fields.summary`
+- `$JIRA_DESCRIPTION` — `.fields.description`
+- `$JIRA_TYPE` — `.fields.issuetype.name`
+- `$JIRA_PRIORITY` — `.fields.priority.name`
+- `$JIRA_ACCEPTANCE` — typically a custom field; try `.fields | to_entries[] | select(.key | test("acceptance"; "i"))`
+- `$JIRA_LABELS` — `.fields.labels[]`
+- `$JIRA_PARENT` — `.fields.parent.key` (if subtask)
 
 ### 2.3 Derive Branch Name
 
@@ -162,14 +138,12 @@ Build the branch name from the Jira issue type and summary:
 
 ### 2.4 Search for Related Context
 
-Use Rovo search to find related tickets, docs, or context:
-```
-mcp__plugin_atlassian_atlassian__search(
-  query: "$JIRA_SUMMARY"
-)
+Search Jira for related work items by keyword. Pull 2-3 high-signal terms from `$JIRA_SUMMARY` and search:
+```bash
+acli jira workitem search --jql "text ~ \"$KEYWORDS\" AND key != \"$TICKET_ID\"" --fields "key,summary,status" --json --limit 10
 ```
 
-Store any relevant related items (linked tickets, Confluence docs) as `$RELATED_CONTEXT`.
+Store the related tickets as `$RELATED_CONTEXT`. Confluence search is unavailable via acli — if Confluence context is needed, the user must check manually at `https://starktechgroup.atlassian.net/wiki`.
 
 ### 2.5 Write .jira-context File (deferred to after worktree creation)
 
@@ -472,7 +446,6 @@ Type:       $JIRA_TYPE
 Worktree:   $WORKTREE_PATH
 Branch:     $BRANCH_NAME (from origin/dev)
 Plan:       $WORKTREE_PATH/plans/$TICKET_ID.md
-Jira Mode:  $JIRA_MODE
 
 Config copied:
   - .claude/
@@ -563,15 +536,10 @@ At any point if an error occurs:
 - Worktree path already exists (directory conflict)
 - Branch already exists (from previous attempt)
 - Jira ticket not found (typo in ticket ID)
-- Jira auth failure -> fall back to acli if in MCP mode
+- Jira auth failure — run `acli jira auth login --site starktechgroup.atlassian.net`
 - Git fetch failure (network, auth)
 - Insufficient disk space
 - Source config files with restricted permissions
-
-**Jira Fallback Rules:**
-- If any MCP Jira call fails mid-workflow, automatically retry using acli CLI
-- Switch `$JIRA_MODE` to "acli" and continue
-- Inform user: "Jira MCP call failed - switched to acli CLI fallback"
 
 **Cleanup on Failure:**
 - If the worktree was created but a later step fails, do NOT automatically remove it

@@ -258,48 +258,46 @@ Log: /tmp/claude-permission-audit.log (47 tool calls)
 
 --- TOOL USAGE SUMMARY ---
 
-    18  Bash
+    22  Bash
      9  Read
      5  Grep
      4  Task
      3  Write
      2  Glob
-     2  mcp__github-cli__get_pull_request
-     1  mcp__github-cli__get_pull_request_files
-     1  mcp__github-cli__create_pull_request_review
+     2  AskUserQuestion
 
 --- BASH COMMANDS USED ---
 
   curl -sL -H "Authorization: token ..." -o /tmp/pr-review-screenshots/screenshot-0.png
+  gh api repos/owner/repo/pulls/199/files --paginate
+  gh api -X POST repos/owner/repo/pulls/199/reviews --input /tmp/pr-review-payload.json
   gh pr diff 199 --stat
+  gh pr view 199 --json title,body,headRefName
   git remote get-url origin
   mkdir -p /tmp/pr-review-screenshots
   rm -rf /tmp/pr-review-screenshots
 
 --- NON-BASH TOOLS USED ---
 
+  AskUserQuestion
   Glob
   Grep
   Read
   Task
   Write
-  mcp__github-cli__create_pull_request_review
-  mcp__github-cli__get_pull_request
-  mcp__github-cli__get_pull_request_files
 
 --- SUGGESTED --allowedTools ---
 
 # Paste into your launcher script's --allowedTools:
 claude --allowedTools \
+  "AskUserQuestion" \
   "Glob" \
   "Grep" \
   "Read" \
   "Task" \
   "Write" \
-  "mcp__github-cli__create_pull_request_review" \
-  "mcp__github-cli__get_pull_request" \
-  "mcp__github-cli__get_pull_request_files" \
   "Bash(curl*)" \
+  "Bash(gh api*)" \
   "Bash(gh pr*)" \
   "Bash(git remote*)" \
   "Bash(mkdir*)" \
@@ -311,15 +309,17 @@ claude --allowedTools \
   [COVERED]  Read
   [COVERED]  Glob
   [COVERED]  Grep
+  [COVERED]  AskUserQuestion
   [MISSING]  Task  <-- add to --allowedTools
   [MISSING]  Write  <-- add to --allowedTools
-  [COVERED]  mcp__github-cli__get_pull_request
   [COVERED]  Bash: git remote get-url origin
   [COVERED]  Bash: gh pr diff 199 --stat
+  [COVERED]  Bash: gh pr view 199 --json title,body,headRefName
+  [COVERED]  Bash: gh api repos/owner/repo/pulls/199/files --paginate
   [MISSING]  Bash: mkdir -p /tmp/pr-review-screenshots  <-- add to --allowedTools
   [MISSING]  Bash: rm -rf /tmp/pr-review-screenshots  <-- add to --allowedTools
 
-Summary: 5 covered, 4 missing (non-Bash tools)
+Summary: 4 covered, 2 missing (non-Bash tools)
 
 === END REPORT ===
 ```

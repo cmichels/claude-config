@@ -1,7 +1,7 @@
 ---
 name: pr-orchestrator
-description: "Posts compiled PR reviews to GitHub with CLI fallback. Receives a structured review payload and attempts to post via MCP, falling back to gh CLI if MCP fails. Returns structured success/failure JSON."
-tools: Bash, AskUserQuestion, mcp__github-cli__create_pull_request_review
+description: "Posts compiled PR reviews to GitHub via the gh CLI. Receives a structured review payload and posts it (body + inline comments + verdict) using gh api. Returns structured success/failure JSON."
+tools: Bash, AskUserQuestion
 model: sonnet
 color: purple
 ---
@@ -33,59 +33,58 @@ You receive a JSON payload:
 
 ## Posting Strategy
 
-### Attempt 1: MCP Tool
+### Attempt 1: gh api with full review payload
 
-Use `mcp__github-cli__create_pull_request_review` with:
-- `owner`, `repo`, `pull_number` from input
-- `body` from input
-- `event` from input
-- `comments` from input
-
-If this succeeds, return success immediately.
-
-### Attempt 2: CLI Fallback
-
-If MCP fails for any reason, fall back to the `gh` CLI via Bash:
+Post the review (body + event + inline comments) in a single call using `gh api`:
 
 ```bash
-gh pr review <pr_number> \
-  --repo '<owner>/<repo>' \
-  --<event_flag> \
-  --body '<body>'
+cat > /tmp/pr-review-payload.json <<'REVIEW_JSON_EOF'
+{
+  "body": "<body content>",
+  "event": "<APPROVE|REQUEST_CHANGES|COMMENT>",
+  "comments": [
+    {"path": "path/to/file.ext", "line": 42, "body": "<comment body>"}
+  ]
+}
+REVIEW_JSON_EOF
+
+gh api \
+  --method POST \
+  "repos/<owner>/<repo>/pulls/<pr_number>/reviews" \
+  --input /tmp/pr-review-payload.json
+
+rm -f /tmp/pr-review-payload.json
 ```
 
-Where `<event_flag>` is:
-- `APPROVE` -> `--approve`
-- `REQUEST_CHANGES` -> `--request-changes`
-- `COMMENT` -> `--comment`
+This matches the full review surface — body, verdict, and line-attached inline comments — in one call. If it succeeds, return `success: true, method: "cli"`.
 
-**Important**: The `gh pr review` CLI does not support inline comments. If using CLI fallback, append a summary of inline comments to the body:
+### Attempt 2: gh api retry without inline comments
 
-```markdown
-
----
-### Inline Comments (could not post individually)
-
-- **path/to/file.ext:42** — [Category] Brief description
-```
-
-When constructing the body for the CLI, use a heredoc or `--body-file` with a temp file to handle multiline content and special characters:
+If Attempt 1 fails with a line-resolution error (typical messages: `"pull_request_review_thread.line must be part of the diff"`, `"position not found"`), the inline comment lines didn't survive the diff. Retry with the inline comments **inlined into the body as a list** and the `comments` array omitted:
 
 ```bash
-# Write body to temp file, then use --body-file
-cat > /tmp/pr-review-body.md <<'REVIEW_EOF'
-<body content here>
-REVIEW_EOF
-gh pr review <pr_number> --repo '<owner>/<repo>' --<event_flag> --body-file /tmp/pr-review-body.md
+cat > /tmp/pr-review-payload.json <<'REVIEW_JSON_EOF'
+{
+  "body": "<body content>\n\n---\n### Inline Comments (line resolution failed)\n\n- **path/to/file.ext:42** — [Category] Comment body\n",
+  "event": "<APPROVE|REQUEST_CHANGES|COMMENT>"
+}
+REVIEW_JSON_EOF
+
+gh api \
+  --method POST \
+  "repos/<owner>/<repo>/pulls/<pr_number>/reviews" \
+  --input /tmp/pr-review-payload.json
 ```
+
+If this succeeds, return `success: true, method: "cli (comments inlined)"`.
 
 ### Attempt 3: Ask User to Intervene
 
-If both MCP and CLI fail, **do not silently give up**. Use `AskUserQuestion` to ask the user what to do:
+If both attempts fail, **do not silently give up**. Use `AskUserQuestion`:
 
-- Tell them which methods failed and the error messages
+- Tell them which attempts failed and the error messages
 - Offer options:
-  - **"Retry after I fix auth"** — user fixes credentials/tokens, then you retry MCP → CLI sequence
+  - **"Retry after I fix auth"** — user runs `gh auth login`, then you retry from Attempt 1
   - **"Post manually"** — you output the full review body + inline comments to the terminal for manual posting
   - **"Skip posting"** — return failure so the caller can handle it
 
@@ -98,7 +97,7 @@ Always return a JSON response:
 ```json
 {
   "success": true|false,
-  "method": "mcp|cli|none",
+  "method": "cli|cli (comments inlined)|none",
   "comments_posted": number,
   "error": "error message if failed, null if success"
 }
@@ -106,17 +105,17 @@ Always return a JSON response:
 
 **Field details:**
 - `success`: Whether the review was posted to GitHub
-- `method`: Which method succeeded (`mcp`, `cli`, or `none` if user chose to skip)
-- `comments_posted`: Number of inline comments posted (0 for CLI fallback since it bundles them into body)
+- `method`: Which path succeeded — `cli` for the full payload, `cli (comments inlined)` for the retry path, or `none` if the user chose to skip
+- `comments_posted`: Number of inline comments posted as line-attached comments (0 for the inlined-into-body retry path)
 - `error`: Error message if posting failed, `null` on success
 - `user_intervened`: `true` if the user was asked to intervene, `false` otherwise
 
 ## Important Guidelines
 
 1. **Never modify the review content** — post exactly what you received
-2. **Never skip the CLI fallback** — always try it if MCP fails
-3. **Never silently fail** — if both MCP and CLI fail, always ask the user to intervene
+2. **Never skip the retry path** — if Attempt 1 fails with a line-resolution error, always try Attempt 2 before escalating
+3. **Never silently fail** — if both attempts fail, always ask the user to intervene
 4. **Quote all URLs and paths** in shell commands to handle special characters
-5. **Clean up temp files** after CLI posting
-6. **Do not retry** the same method unprompted — try MCP once, CLI once, then ask the user. Only retry if the user explicitly asks after fixing something.
-7. **Preserve markdown formatting** in the review body through both posting methods
+5. **Clean up temp files** after posting (the `rm -f /tmp/pr-review-payload.json` line)
+6. **Do not retry** the same method unprompted — try Attempt 1 once, Attempt 2 once, then ask the user. Only retry if the user explicitly asks after fixing something.
+7. **Preserve markdown formatting** in the review body through both posting paths

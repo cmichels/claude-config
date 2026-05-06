@@ -1,6 +1,6 @@
 ---
 description: "Collaborative PR review using an agent team. Usage: /review-pr-team <PR_NUMBER> [--model sonnet|opus|haiku]. Spawns 4 reviewer teammates in tmux panes — security+errors, code quality, architecture, coverage+style — that review in parallel, discuss findings, then the lead synthesizes and posts to GitHub."
-allowed_tools: Read, Glob, Grep, Bash, Agent, TeamCreate, TeamDelete, TaskCreate, TaskList, TaskGet, TaskUpdate, TaskOutput, TaskStop, SendMessage, AskUserQuestion, WebFetch, mcp__github-cli__create_pull_request_review, mcp__atlassian__getJiraIssue, mcp__atlassian__searchJiraIssuesUsingJql
+allowed_tools: Read, Glob, Grep, Bash, Agent, TeamCreate, TeamDelete, TaskCreate, TaskList, TaskGet, TaskUpdate, TaskOutput, TaskStop, SendMessage, AskUserQuestion, WebFetch
 ---
 
 # PR Review Team Command
@@ -618,9 +618,8 @@ After all responsive teammates have gone idle (or cutoff reached), mark task 5 c
 ### 7a: Motivation Analysis (Lead)
 
 Extract any Jira ticket key from the PR title or branch name (e.g., `OP-3088` from `feature/OP-3088_remove-double-scrollbars`). If found:
-- Fetch the ticket via `mcp__atlassian__getJiraIssue`
-- If Atlassian MCP fails, fall back to `acli jira --action getIssue --issue <KEY>`
-- If acli also fails, use `AskUserQuestion` with: **Retry after I fix auth** | **Skip this step** | **Provide data manually**
+- Fetch the ticket via `acli jira workitem view <KEY> --json --fields "*all"`
+- If acli fails (auth or connectivity), use `AskUserQuestion` with: **Retry after I fix auth** | **Skip this step** | **Provide data manually**
 
 Explore the codebase for plan files: `~/.claude/plans/`, `./plans/`, `./docs/`.
 
@@ -691,89 +690,91 @@ corroborations, resolved contradictions, escalated issues]
 
 ---
 
-## Step 8: Post to GitHub with Fallback
+## Step 8: Post to GitHub
 
-### Attempt 1: Direct MCP Post
+### Attempt 1: Post the full review payload via gh api
 
-Use `mcp__github-cli__create_pull_request_review`:
+Post body, verdict, and inline comments in a single call:
 
-```json
+```bash
+cat > /tmp/pr-review-payload.json <<'REVIEW_JSON_EOF'
 {
-  "owner": "$OWNER",
-  "repo": "$REPO",
-  "pull_number": $PR_NUMBER,
   "body": "<compiled review body>",
-  "event": "APPROVE|REQUEST_CHANGES|COMMENT",
-  "comments": [<merged inline comments>]
+  "event": "<APPROVE|REQUEST_CHANGES|COMMENT>",
+  "comments": [
+    {"path": "path/to/file.ext", "line": 42, "body": "<comment body>"}
+  ]
 }
+REVIEW_JSON_EOF
+
+gh api \
+  --method POST \
+  "repos/$OWNER/$REPO/pulls/$PR_NUMBER/reviews" \
+  --input /tmp/pr-review-payload.json
+
+rm -f /tmp/pr-review-payload.json
 ```
 
-If successful, record: `post_method = "MCP"`, `post_success = true`.
+Capture the returned review ID (`.id` from the JSON response) as `$REVIEW_ID`. If successful, record: `post_method = "gh api"`, `post_success = true`.
 
 ### Attempt 1 Verification
 
-After a successful MCP post, verify inline comments were stored:
+After a successful post, verify inline comments were stored:
 
 ```bash
-gh api 'repos/$OWNER/$REPO/pulls/$PR_NUMBER/comments' \
-  --jq '[.[] | select(.pull_request_review_id == <REVIEW_ID>)] | length'
+gh api "repos/$OWNER/$REPO/pulls/$PR_NUMBER/comments" \
+  --jq "[.[] | select(.pull_request_review_id == $REVIEW_ID)] | length"
 ```
 
 - Count matches expected → verification passed.
-- Count is **less** → identify missing comments, post as follow-up body comment:
+- Count is **less** → identify missing comments, post as follow-up PR-level comment:
   ```bash
-  gh pr comment $PR_NUMBER --repo '$OWNER/$REPO' --body "$(cat <<'EOF'
+  gh pr comment $PR_NUMBER --repo "$OWNER/$REPO" --body "$(cat <<'EOF'
   **Inline comments that failed to attach (line resolution):**
   - **path/to/file.ext:42** — [Category] Comment body
   EOF
   )"
   ```
-  Record: `post_method = "MCP (partial — N comments inlined in body)"`.
+  Record: `post_method = "gh api (partial — N comments inlined in follow-up)"`.
 
-**NEVER write inline comment content directly in the review body text** as a workaround for posting failures.
+**NEVER write inline comment content directly in the review body text** as a workaround for posting failures — use the verification + follow-up comment pattern above.
 
-### Attempt 1b: MCP Retry Without Inline Comments
+### Attempt 2: gh api retry without inline comments
 
-If Attempt 1 fails with an error about invalid line, position, or diff:
+If Attempt 1 fails with a line-resolution error (typical messages: `"pull_request_review_thread.line must be part of the diff"`, `"position not found"`):
 
-1. Remove ALL inline comments from the request
+1. Remove ALL inline comments from the payload
 2. Append them to the review body as a consolidated list:
    ```markdown
    ---
    ### Inline Comments (line resolution failed)
    - **path/to/file.ext:42** — [Category] Comment body
    ```
-3. Retry `mcp__github-cli__create_pull_request_review` with just the body (no `comments` array)
-
-If successful, record: `post_method = "MCP (comments inlined)"`, `post_success = true`.
-
-### Attempt 2: gh CLI Fallback
-
-If MCP fails entirely:
+3. Retry the same `gh api` call with the new body and no `comments` array:
 
 ```bash
-cat > /tmp/pr-review-body.md <<'REVIEW_EOF'
-<review body>
+cat > /tmp/pr-review-payload.json <<'REVIEW_JSON_EOF'
+{
+  "body": "<body content with inlined comments appended>",
+  "event": "<APPROVE|REQUEST_CHANGES|COMMENT>"
+}
+REVIEW_JSON_EOF
 
----
-### Inline Comments (could not post individually)
+gh api \
+  --method POST \
+  "repos/$OWNER/$REPO/pulls/$PR_NUMBER/reviews" \
+  --input /tmp/pr-review-payload.json
 
-- **path/to/file.ext:42** — [Category] Brief description
-REVIEW_EOF
-
-gh pr review $PR_NUMBER --repo '$OWNER/$REPO' --<event_flag> --body-file /tmp/pr-review-body.md
-rm -f /tmp/pr-review-body.md
+rm -f /tmp/pr-review-payload.json
 ```
 
-Where `<event_flag>` is: `APPROVE` → `--approve`, `REQUEST_CHANGES` → `--request-changes`, `COMMENT` → `--comment`.
-
-If successful, record: `post_method = "CLI fallback (gh)"`, `post_success = true`.
+If successful, record: `post_method = "gh api (comments inlined)"`, `post_success = true`.
 
 ### Attempt 3: Ask User to Intervene
 
-**Never silently fail.** If both MCP and CLI fail, use `AskUserQuestion`:
-- Report which methods failed and their error messages
-- Options: **Retry after I fix auth** | **Post manually** | **Skip posting**
+**Never silently fail.** If both attempts fail, use `AskUserQuestion`:
+- Report which attempts failed and their error messages
+- Options: **Retry after I fix auth** (user runs `gh auth login`) | **Post manually** | **Skip posting**
 
 ---
 
@@ -783,7 +784,7 @@ If successful, record: `post_method = "CLI fallback (gh)"`, `post_success = true
 ## PR Review Complete: #<number> - <title>
 
 **Verdict**: APPROVED / CHANGES REQUESTED / COMMENTED
-**Posted to GitHub**: Yes (MCP) | Yes (CLI fallback) | Skipped (user choice) | Failed
+**Posted to GitHub**: Yes (gh api) | Yes (gh api, comments inlined) | Skipped (user choice) | Failed
 **Review method**: Agent team (4 reviewers on $REVIEWER_MODEL + lead)
 
 ### Files Changed (<n> files)

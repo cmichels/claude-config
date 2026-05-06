@@ -1,7 +1,7 @@
 ---
 name: pr-motivation-analysis
 description: "Analyzes the likely motivations, design rationale, and strategic intent behind a PR's changes. Synthesizes ticket context, code patterns, and project knowledge into a subjective narrative assessment. Invoked during comprehensive PR reviews."
-tools: Read, Glob, Grep, mcp__plugin_atlassian_atlassian__getJiraIssue, mcp__plugin_atlassian_atlassian__search
+tools: Read, Glob, Grep, Bash
 model: sonnet
 color: cyan
 ---
@@ -26,9 +26,10 @@ You receive:
 ### 1. Extract Ticket Context
 
 If a Jira ticket key is present (e.g., `OP-3088` from branch `feature/OP-3088_...`):
-- Fetch the ticket via `mcp__plugin_atlassian_atlassian__getJiraIssue` to get the full description, acceptance criteria, priority, and comments
-- If MCP fails, note it and continue with what you have from the PR description
+- Fetch the ticket via `acli jira workitem view <KEY> --json --fields "*all"` to get the full description, acceptance criteria, priority, and comments
+- If acli fails (auth issue, network), note it and continue with what you have from the PR description
 - Use the ticket to understand the original request, who asked for it, and what the acceptance criteria are
+- For broader context, search related work items with `acli jira workitem search --jql 'text ~ "<keyword>"' --json --limit 10`
 
 ### 2. Analyze the Change Pattern
 

@@ -1,6 +1,6 @@
 ---
 description: "Generate a .jira-context file for the current repo. Detects ticket ID from branch name or accepts it as an argument. Usage: /jira-context [TICKET-ID]"
-allowed_tools: Bash, Read, Write, mcp__plugin_atlassian_atlassian__getJiraIssue, mcp__plugin_atlassian_atlassian__getAccessibleAtlassianResources
+allowed_tools: Bash, Read, Write
 ---
 
 # Generate .jira-context
@@ -38,30 +38,22 @@ ls "$REPO_ROOT/.jira-context" 2>/dev/null
 
 ## Step 4: Fetch Jira Ticket
 
-**Try MCP first:**
-```
-mcp__plugin_atlassian_atlassian__getAccessibleAtlassianResources()
-```
+Use acli to fetch the ticket as JSON:
 
-Store the cloudId. Then:
-```
-mcp__plugin_atlassian_atlassian__getJiraIssue(
-  cloudId: "$CLOUD_ID",
-  issueIdOrKey: "$TICKET_ID"
-)
-```
-
-**If MCP fails:** Fall back to acli CLI:
 ```bash
-acli jira --action getIssue --issue "$TICKET_ID" 2>/dev/null
+acli jira workitem view "$TICKET_ID" --json --fields "summary,issuetype,priority"
 ```
 
-**If both fail:** STOP and inform user about Jira connectivity.
+**If acli fails:** STOP and inform user about Jira connectivity. Suggest running `acli jira auth status` to verify auth.
 
-Extract:
-- `$JIRA_SUMMARY` — ticket title
-- `$JIRA_TYPE` — issue type (Story, Bug, Task, etc.)
-- `$JIRA_PRIORITY` — priority level
+Parse the JSON with jq:
+```bash
+JIRA_SUMMARY=$(echo "$JSON" | jq -r '.fields.summary // .summary')
+JIRA_TYPE=$(echo "$JSON" | jq -r '.fields.issuetype.name // .issuetype.name')
+JIRA_PRIORITY=$(echo "$JSON" | jq -r '.fields.priority.name // .priority.name // "None"')
+```
+
+The acli JSON wraps fields under `.fields.*`; the `// .X` fallbacks handle any future flattening.
 
 ## Step 5: Write .jira-context
 

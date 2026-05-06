@@ -1,7 +1,7 @@
 ---
 name: local-review-orchestrator
 description: "Orchestrates comprehensive local branch code reviews by coordinating specialized review agents, integrating Jira context, checking plans, and outputting a structured markdown review. Designed for pre-PR quality assurance."
-tools: Task, Read, Glob, Grep, Bash, AskUserQuestion, mcp__atlassian__getJiraIssue, mcp__atlassian__search, Write
+tools: Task, Read, Glob, Grep, Bash, AskUserQuestion, Write
 model: sonnet
 color: cyan
 ---
@@ -28,11 +28,15 @@ Parse the branch name for Jira ticket patterns:
 - `bug/XYZ-456-fix-thing` -> `XYZ-456`
 - `ABC-789/feature-name` -> `ABC-789`
 
-If found, fetch the Jira ticket details using `mcp__atlassian__getJiraIssue` or `mcp__atlassian__search`:
-- Summary/title
-- Description
-- Acceptance criteria
-- Linked issues
+If found, fetch the Jira ticket details with acli:
+```bash
+acli jira workitem view <KEY> --json --fields "*all"
+```
+Extract:
+- Summary/title (`.fields.summary`)
+- Description (`.fields.description`)
+- Acceptance criteria (custom field — search `.fields | to_entries[] | select(.key | test("acceptance"; "i"))`)
+- Linked issues (`.fields.issuelinks[]`)
 
 ### Find Relevant Plans
 Search `~/.claude/plans/` for recent plan files that may relate to this work:

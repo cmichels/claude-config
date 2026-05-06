@@ -1,6 +1,6 @@
 ---
-description: "Commit, push, create Jira ticket (if needed), and open a PR with proper labels/reviewers. Usage: /ship-it. Auto-generates commit messages and PR descriptions from code changes and Jira context. Validates branch naming (feature/* or bug/*), auto-detects dependency changes, assigns reviewers. Falls back to acli CLI if Atlassian MCP is unavailable."
-allowed_tools: Read, Glob, Grep, Bash, AskUserQuestion, mcp__github-cli__create_pull_request, mcp__github-cli__get_pull_request, mcp__github-cli__list_pull_requests, mcp__plugin_atlassian_atlassian__createJiraIssue, mcp__plugin_atlassian_atlassian__getJiraIssue, mcp__plugin_atlassian_atlassian__searchJiraIssuesUsingJql, mcp__plugin_atlassian_atlassian__getVisibleJiraProjects, mcp__plugin_atlassian_atlassian__getJiraProjectIssueTypesMetadata, mcp__plugin_atlassian_atlassian__getAccessibleAtlassianResources, mcp__plugin_atlassian_atlassian__search
+description: "Commit, push, create Jira ticket (if needed), and open a PR with proper labels/reviewers. Usage: /ship-it. Auto-generates commit messages and PR descriptions from code changes and Jira context. Validates branch naming (feature/* or bug/*), auto-detects dependency changes, assigns reviewers. Uses acli for all Jira operations."
+allowed_tools: Read, Glob, Grep, Bash, AskUserQuestion
 ---
 
 # Ship-It Command
@@ -32,44 +32,19 @@ Extract owner and repo from the remote URL:
 
 Store as `$OWNER` and `$REPO`.
 
-### 1.3 Check Jira Connectivity (MCP with acli Fallback)
-
-**Try MCP first:**
-
-```
-mcp__plugin_atlassian_atlassian__getAccessibleAtlassianResources()
-```
-
-Store the cloudId for subsequent Jira calls. Then verify connectivity:
-```
-mcp__plugin_atlassian_atlassian__getVisibleJiraProjects(cloudId: "$CLOUD_ID")
-```
-
-**If MCP succeeds:** Set `$JIRA_MODE = "mcp"` and continue.
-
-**If MCP fails, hangs (>10s), or is not configured:** Fall back to acli CLI.
+### 1.3 Check Jira Connectivity
 
 ```bash
-acli jira project list 2>/dev/null
+acli jira auth status 2>&1
 ```
 
-**If acli succeeds:** Set `$JIRA_MODE = "acli"` and inform user:
+**If acli auth check fails:** STOP and inform user:
 ```
-Atlassian MCP unavailable - using acli CLI fallback for Jira operations.
-```
-
-**If both fail:** STOP and inform user:
-```
-Jira connectivity failed via both MCP and acli CLI.
-
-MCP setup:
-  claude mcp add --transport sse atlassian https://mcp.atlassian.com/v1/sse
+Jira connectivity failed.
 
 acli setup:
-  brew install atlassian-cli
-  acli auth
-
-Run `/mcp` to check your MCP server status.
+  ~/projects/personal/claude-config/install-acli.sh
+  acli jira auth login --site starktechgroup.atlassian.net
 ```
 
 ---
@@ -135,22 +110,19 @@ The project key is always derived from the ticket prefix (the letters before the
 
 ### 3.2 If Ticket Found: Verify It Exists
 
-**If `$JIRA_MODE = "mcp"`:**
-```
-mcp__plugin_atlassian_atlassian__getJiraIssue(
-  cloudId: "$CLOUD_ID",
-  issueIdOrKey: "$JIRA_TICKET"
-)
-```
-
-**If `$JIRA_MODE = "acli"`:**
 ```bash
-acli jira workitem view "$JIRA_TICKET" --json
+acli jira workitem view "$JIRA_TICKET" --json --fields "summary,description,issuetype"
 ```
 
-Store the ticket summary and description as `$JIRA_SUMMARY` and `$JIRA_DESCRIPTION` for later use.
+Parse with jq:
+```bash
+JIRA_SUMMARY=$(echo "$JSON" | jq -r '.fields.summary')
+JIRA_DESCRIPTION=$(echo "$JSON" | jq -r '.fields.description // ""')
+```
 
-**If ticket not found:** Inform user and ask if they want to create it.
+Store for later use.
+
+**If ticket not found** (acli exits non-zero or returns null): Inform user and ask if they want to create it.
 
 ### 3.3 If No Ticket: Create New Jira Ticket
 
@@ -162,33 +134,19 @@ Prompt user for required information using AskUserQuestion:
 
 Store the chosen project key as `$PROJECT_KEY`.
 
-**If `$JIRA_MODE = "mcp"`:**
-
-First, get available issue types for the project:
-```
-mcp__plugin_atlassian_atlassian__getJiraProjectIssueTypesMetadata(
-  cloudId: "$CLOUD_ID",
-  projectIdOrKey: "$PROJECT_KEY"
-)
-```
-
 Create the ticket:
-```
-mcp__plugin_atlassian_atlassian__createJiraIssue(
-  cloudId: "$CLOUD_ID",
-  projectKey: "$PROJECT_KEY",
-  issueTypeName: "$ISSUE_TYPE",
-  summary: "$SUMMARY",
-  description: "$DESCRIPTION"
-)
-```
-
-**If `$JIRA_MODE = "acli"`:**
 ```bash
 acli jira workitem create --project "$PROJECT_KEY" --type "$ISSUE_TYPE" --summary "$SUMMARY" --description "$DESCRIPTION" --json
 ```
 
-Store returned key as `$JIRA_TICKET`.
+Parse the returned key:
+```bash
+JIRA_TICKET=$(echo "$JSON" | jq -r '.key')
+```
+
+Store as `$JIRA_TICKET`.
+
+**If acli rejects the issue type** (e.g., "Story" not valid for the project): the available types vary per project. Try common alternatives — `Task`, `Story`, `Bug` — or ask the user.
 
 ### 3.4 Update Branch Name (if ticket was created)
 
@@ -364,16 +322,11 @@ git push
 
 ### 6.1 Check for Existing PR
 
-```
-mcp__github-cli__list_pull_requests(
-  owner: "$OWNER",
-  repo: "$REPO",
-  head: "$OWNER:$BRANCH",
-  state: "open"
-)
+```bash
+gh pr list --repo "$OWNER/$REPO" --head "$BRANCH" --state open --json number,url,title
 ```
 
-**If PR already exists:** Inform user and provide link. Ask if they want to update it or skip.
+**If PR already exists** (non-empty JSON array): Inform user and provide link. Ask if they want to update it or skip.
 
 ### 6.2 Set Base Branch
 
@@ -444,19 +397,25 @@ if $HAS_DEPENDENCY_CHANGES:
 
 ### 6.5 Create the PR
 
-```
-mcp__github-cli__create_pull_request(
-  owner: "$OWNER",
-  repo: "$REPO",
-  title: "$PR_TITLE",
-  body: "$PR_BODY",
-  head: "$BRANCH",
-  base: "dev",
-  draft: true
-)
+Write the PR body to a temp file (avoids escaping issues with multi-line content) and create with `gh pr create`:
+
+```bash
+cat > /tmp/pr-body.md <<'PR_BODY_EOF'
+$PR_BODY
+PR_BODY_EOF
+
+gh pr create \
+  --repo "$OWNER/$REPO" \
+  --title "$PR_TITLE" \
+  --body-file /tmp/pr-body.md \
+  --head "$BRANCH" \
+  --base dev \
+  --draft
+
+rm -f /tmp/pr-body.md
 ```
 
-Store returned PR number as `$PR_NUMBER`.
+The PR URL is printed to stdout. Extract the PR number from the URL (last path segment) and store as `$PR_NUMBER`.
 
 ### 6.5.1 Link PR to Task
 
@@ -516,7 +475,6 @@ Repo:       $OWNER/$REPO
 Branch:     $BRANCH
 Base:       dev
 Jira:       $JIRA_TICKET (https://starktechgroup.atlassian.net/browse/$JIRA_TICKET)
-Jira Mode:  $JIRA_MODE (mcp or acli)
 PR:         #$PR_NUMBER [DRAFT] (https://github.com/$OWNER/$REPO/pull/$PR_NUMBER)
 Assignee:   $GH_USER
 Reviewers:  tsp-admin-contributors, tsp-contributors, copilot-pull-request-reviewer
@@ -539,17 +497,12 @@ At any point if an error occurs:
 **Common errors to handle:**
 - Git authentication failure
 - GitHub API rate limit
-- Jira API authentication failure -> fall back to acli if in MCP mode
+- Jira auth failure — run `acli jira auth login --site starktechgroup.atlassian.net`
 - Pre-commit hook failure -> STOP, do not push, show hook output
 - Branch protection rules preventing push
 - PR already exists
 - Required labels don't exist in repo
 - Reviewer teams don't exist or user lacks permission to request
-
-**Jira Fallback Rules:**
-- If any MCP Jira call fails mid-workflow (after initial connectivity check passed), automatically retry the same operation using acli CLI before reporting failure
-- Switch `$JIRA_MODE` to "acli" and continue the workflow
-- Inform user: "Jira MCP call failed - switched to acli CLI fallback"
 
 ---
 
@@ -557,23 +510,16 @@ At any point if an error occurs:
 
 This command requires:
 
-1. **GitHub CLI MCP** - For PR operations (should already be configured)
-
-2. **Atlassian MCP** (primary) - For Jira operations (uses OAuth authentication)
-   - To add: `claude mcp add --transport sse atlassian https://mcp.atlassian.com/v1/sse`
-   - Run `/mcp` to verify the atlassian server is connected
-   - If not authenticated, the MCP will prompt for OAuth login
-
-3. **acli CLI** (fallback) - For Jira operations when MCP is unavailable:
+1. **GitHub CLI (gh)** - For all PR operations:
 ```bash
-brew install atlassian-cli
-acli auth
+brew install gh   # or: sudo apt install gh
+gh auth login
 ```
 
-4. **GitHub CLI (gh)** - For label/reviewer operations:
+2. **acli CLI** - For all Jira operations:
 ```bash
-brew install gh
-gh auth login
+~/projects/personal/claude-config/install-acli.sh
+acli jira auth login --site starktechgroup.atlassian.net
 ```
 
 ---

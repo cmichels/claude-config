@@ -1,6 +1,6 @@
 ---
 description: "Generate a daily standup summary from git commits, Jira activity, and open PRs. Usage: /standup [days=1]"
-allowed_tools: Bash, Read, Glob, Grep, mcp__plugin_atlassian_atlassian__searchJiraIssuesUsingJql, mcp__plugin_atlassian_atlassian__getJiraIssue, mcp__plugin_atlassian_atlassian__getAccessibleAtlassianResources
+allowed_tools: Bash, Read, Glob, Grep
 ---
 
 # /standup — Daily Standup Summary
@@ -46,24 +46,17 @@ Store as `$REVIEW_REQUESTS`.
 
 ### 1d. Jira Activity
 
-**Try MCP first** using cloudId `7d1d0780-63ed-4375-90d5-5424cc8695a3`:
-
 Search for issues assigned to the current user, updated in the lookback window:
-```
-searchJiraIssuesUsingJql(
-  cloudId: "7d1d0780-63ed-4375-90d5-5424cc8695a3",
-  jql: "assignee = currentUser() AND updated >= -${DAYS}d ORDER BY updated DESC"
-)
-```
-
-**If MCP fails or hangs (>30s):** Fall back to CLI:
 ```bash
-acli jira --action getIssueList --jql "assignee = currentUser() AND updated >= -${DAYS}d ORDER BY updated DESC" 2>/dev/null
+acli jira workitem search --jql "assignee = currentUser() AND updated >= -${DAYS}d ORDER BY updated DESC" --fields "key,summary,status,priority" --json --limit 50
 ```
 
-**If both fail:** Skip Jira section entirely. Do not block the report.
+**If acli fails:** Skip Jira section entirely. Do not block the report.
 
-Store as `$JIRA_ISSUES`. Extract key, summary, status, and priority for each.
+Store as `$JIRA_ISSUES`. Extract key, summary, status, and priority for each via jq:
+```bash
+echo "$JIRA_ISSUES" | jq -r '.[] | "\(.key) | \(.fields.status.name) | \(.fields.priority.name // "None") | \(.fields.summary)"'
+```
 
 ## Step 2: Detect Current Context
 
