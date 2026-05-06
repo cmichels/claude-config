@@ -1,7 +1,7 @@
 ---
 name: pr-architect-review
 description: "Performs architecture and design review for pull requests. Evaluates design patterns, modularity, scalability, maintainability, API design, and technical debt. Invoked by pr-orchestrator during comprehensive PR reviews."
-tools: Read, Glob, Grep
+tools: Read, Glob, Grep, Bash, TaskList, TaskUpdate, SendMessage
 model: sonnet
 color: orange
 ---

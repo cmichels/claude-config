@@ -1,7 +1,7 @@
 ---
 name: pr-code-review
 description: "Performs code quality review for pull requests. Analyzes logic correctness, error handling, resource management, test coverage, and code clarity. Returns structured findings with inline comments. Invoked by pr-orchestrator during comprehensive PR reviews."
-tools: Read, Glob, Grep
+tools: Read, Glob, Grep, Bash, TaskList, TaskUpdate, SendMessage
 model: sonnet
 color: blue
 ---

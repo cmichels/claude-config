@@ -1,7 +1,7 @@
 ---
 name: pr-style-check
 description: "Performs code style and conventions review for pull requests. Checks naming conventions, formatting, documentation, and consistency with project patterns. Style issues never block PRs. Invoked by pr-orchestrator during comprehensive PR reviews."
-tools: Read, Glob, Grep
+tools: Read, Glob, Grep, Bash, TaskList, TaskUpdate, SendMessage
 model: sonnet
 color: green
 ---

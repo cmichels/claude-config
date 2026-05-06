@@ -1,7 +1,7 @@
 ---
 name: pr-security-scan
 description: "Performs security-focused code review for pull requests. Checks for vulnerabilities including injection attacks, authentication issues, data exposure, cryptography problems, and OWASP Top 10. Returns structured findings with severity ratings. Invoked by pr-orchestrator during comprehensive PR reviews."
-tools: Read, Glob, Grep
+tools: Read, Glob, Grep, Bash, TaskList, TaskUpdate, SendMessage
 model: sonnet
 color: red
 ---

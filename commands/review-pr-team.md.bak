@@ -231,7 +231,7 @@ Spawn all 4 teammates **in parallel** using the `Agent` tool. Each call must inc
 - `team_name: "pr-review-$PR_NUMBER"`
 - `name: "<teammate-name>"`
 - `model: $REVIEWER_MODEL`
-- `subagent_type:` (specialist agent — see each teammate section below)
+- `subagent_type: "general-purpose"`
 
 Each teammate appears in its own tmux pane automatically.
 
@@ -243,7 +243,6 @@ Each teammate appears in its own tmux pane automatically.
 - `name: "security-and-errors"`
 - `team_name: "pr-review-$PR_NUMBER"`
 - `model: $REVIEWER_MODEL`
-- `subagent_type: "pr-security-scan"`
 
 **Spawn prompt:**
 ```
@@ -323,7 +322,6 @@ Before finalizing each finding, check these:
 - `name: "code-quality"`
 - `team_name: "pr-review-$PR_NUMBER"`
 - `model: $REVIEWER_MODEL`
-- `subagent_type: "pr-code-review"`
 
 **Spawn prompt:**
 ```
@@ -403,7 +401,6 @@ Before finalizing each finding, check these:
 - `name: "architecture"`
 - `team_name: "pr-review-$PR_NUMBER"`
 - `model: $REVIEWER_MODEL`
-- `subagent_type: "pr-architect-review"`
 
 **Spawn prompt:**
 ```
@@ -485,7 +482,6 @@ Before finalizing each finding, check these:
 - `name: "coverage-and-style"`
 - `team_name: "pr-review-$PR_NUMBER"`
 - `model: $REVIEWER_MODEL`
-- `subagent_type: "pr-style-check"`
 
 **Spawn prompt:**
 ```
