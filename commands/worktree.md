@@ -92,7 +92,7 @@ Jira connectivity failed.
 
 acli setup:
   ~/projects/personal/claude-config/install-acli.sh
-  acli jira auth login --site starktechgroup.atlassian.net
+  acli jira auth login --site <your-atlassian-site>.atlassian.net
 ```
 
 ### 2.2 Fetch Ticket Details
@@ -143,7 +143,7 @@ Search Jira for related work items by keyword. Pull 2-3 high-signal terms from `
 acli jira workitem search --jql "text ~ \"$KEYWORDS\" AND key != \"$TICKET_ID\"" --fields "key,summary,status" --json --limit 10
 ```
 
-Store the related tickets as `$RELATED_CONTEXT`. Confluence search is unavailable via acli — if Confluence context is needed, the user must check manually at `https://starktechgroup.atlassian.net/wiki`.
+Store the related tickets as `$RELATED_CONTEXT`. Confluence search is unavailable via acli — if Confluence context is needed, the user must check manually at `https://<your-atlassian-site>.atlassian.net/wiki`.
 
 ### 2.5 Write .jira-context File (deferred to after worktree creation)
 
@@ -285,7 +285,7 @@ task-ctl register \
   --priority "$JIRA_PRIORITY"
 ```
 
-Where `$OWNER/$REPO_NAME` is the GitHub org/repo (e.g., `Stark-Tech-Group/stark-web`). Extract from `git -C "$WORKTREE_PATH" remote get-url origin`.
+Where `$OWNER/$REPO_NAME` is the GitHub org/repo (e.g., `example-org/example-repo`). Extract from `git -C "$WORKTREE_PATH" remote get-url origin`.
 
 **Note:** The `--plan` flag is omitted here because the plan file hasn't been generated yet. It will be linked after Step 6.
 
@@ -359,7 +359,7 @@ Create the plan at `$WORKTREE_PATH/plans/$TICKET_ID.md`.
 
 - **Type:** $JIRA_TYPE
 - **Priority:** $JIRA_PRIORITY
-- **Jira:** https://starktechgroup.atlassian.net/browse/$TICKET_ID
+- **Jira:** https://<your-atlassian-site>.atlassian.net/browse/$TICKET_ID
 
 ### Description
 $JIRA_DESCRIPTION
@@ -536,7 +536,7 @@ At any point if an error occurs:
 - Worktree path already exists (directory conflict)
 - Branch already exists (from previous attempt)
 - Jira ticket not found (typo in ticket ID)
-- Jira auth failure — run `acli jira auth login --site starktechgroup.atlassian.net`
+- Jira auth failure — run `acli jira auth login --site <your-atlassian-site>.atlassian.net`
 - Git fetch failure (network, auth)
 - Insufficient disk space
 - Source config files with restricted permissions

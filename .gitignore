@@ -1,5 +1,6 @@
 # ===== SENSITIVE — never commit =====
 .mcp.json
+settings.json
 mcp-needs-auth-cache.json
 stats-cache.json
 statsig/
@@ -39,6 +40,12 @@ usage-data/
 
 # Plans (ephemeral)
 plans/
+
+# Internal notes and memory snapshots
+memories/
+follow-up/
+.context-dump.md
+commands/review-pr-team.md.bak
 
 # Reviews (empty / ephemeral)
 reviews/
