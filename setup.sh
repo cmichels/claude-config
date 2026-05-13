@@ -7,6 +7,9 @@ cd "$CLAUDE_DIR"
 echo "=== Claude Code Environment Setup ==="
 echo ""
 
+PROJECTS_ROOT_DEFAULT="$HOME/projects"
+PRIMARY_PROJECT_DEFAULT="work"
+
 # --- Step 1: .mcp.json from template ---
 if [ -f "$CLAUDE_DIR/.mcp.json" ]; then
   echo "[skip] .mcp.json already exists"
@@ -26,7 +29,23 @@ else
   echo "[done] Created .mcp.json with your PAT"
 fi
 
-# --- Step 2: Create gitignored directories ---
+# --- Step 2: settings.json from template (machine-local) ---
+if [ -f "$CLAUDE_DIR/settings.json" ]; then
+  echo "[skip] settings.json already exists"
+elif [ -f "$CLAUDE_DIR/settings.json.template" ]; then
+  project_root="${CLAUDE_PROJECTS_ROOT:-$PROJECTS_ROOT_DEFAULT}"
+  primary_project="${CLAUDE_PRIMARY_PROJECT:-$PRIMARY_PROJECT_DEFAULT}"
+  sed -e "s|__CLAUDE_PROJECTS_ROOT__|${project_root}|g" \
+      -e "s|__CLAUDE_PRIMARY_PROJECT__|${primary_project}|g" \
+    "$CLAUDE_DIR/settings.json.template" > "$CLAUDE_DIR/settings.json"
+  echo "[done] Created settings.json from template"
+  echo "       root=$project_root"
+  echo "       primary_project=$primary_project"
+else
+  echo "[warn] settings.json.template not found; skipping settings.json generation"
+fi
+
+# --- Step 3: Create gitignored directories ---
 for dir in projects debug telemetry file-history backups cache paste-cache \
            session-env shell-snapshots tasks todos plugins plans reviews \
            usage-data statsig .claude; do
@@ -34,7 +53,7 @@ for dir in projects debug telemetry file-history backups cache paste-cache \
 done
 echo "[done] Created local-only directories"
 
-# --- Step 3: Restore memory files into projects ---
+# --- Step 4: Restore memory files into projects ---
 if [ -d "$CLAUDE_DIR/memories" ]; then
   echo ""
   echo "Found portable memory files from previous machine."
@@ -68,7 +87,7 @@ if [ -d "$CLAUDE_DIR/memories" ]; then
   echo "[done] Restored $restored project memory sets"
 fi
 
-# --- Step 4: Symlink bin/ scripts ---
+# --- Step 5: Symlink bin/ scripts ---
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [ -L "$CLAUDE_DIR/bin" ]; then
   echo "[skip] bin symlink already exists"
@@ -82,7 +101,7 @@ else
   echo "[done] Created bin symlink"
 fi
 
-# --- Step 5: Ensure nested settings.local.json ---
+# --- Step 6: Ensure nested settings.local.json ---
 mkdir -p "$CLAUDE_DIR/.claude"
 if [ ! -f "$CLAUDE_DIR/.claude/settings.local.json" ]; then
   cat > "$CLAUDE_DIR/.claude/settings.local.json" << 'JSONEOF'
@@ -96,7 +115,7 @@ JSONEOF
   echo "[done] Created .claude/settings.local.json"
 fi
 
-# --- Step 6: Symlink review-guidelines.md ---
+# --- Step 7: Symlink review-guidelines.md ---
 if [ -L "$CLAUDE_DIR/review-guidelines.md" ]; then
   echo "[skip] review-guidelines.md symlink already exists"
 elif [ -f "$CLAUDE_DIR/review-guidelines.md" ]; then
@@ -114,6 +133,7 @@ echo "=== Setup Complete ==="
 echo ""
 echo "Next steps:"
 echo "  1. Add GITHUB_PERSONAL_ACCESS_TOKEN to your shell profile if you haven't"
-echo "  2. Run 'claude' in any project directory to start using Claude Code"
-echo "  3. Plugins (playwright, atlassian, gopls) will auto-install on first use"
+echo "  2. (Optional) set CLAUDE_PROJECTS_ROOT and CLAUDE_PRIMARY_PROJECT before setup to customize permissions"
+echo "  3. Run 'claude' in any project directory to start using Claude Code"
+echo "  4. Plugins (playwright, atlassian, gopls) will auto-install on first use"
 echo ""

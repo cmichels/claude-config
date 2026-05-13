@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: ["dev"]
+  pull_request:
+    branches: ["dev"]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Python compile check
+        run: python -m compileall .
+
+      - name: Shell syntax check
+        run: |
+          set -e
+          for f in *.sh bin/*; do
+            if [ -f "$f" ]; then
+              bash -n "$f"
+            fi
+          done

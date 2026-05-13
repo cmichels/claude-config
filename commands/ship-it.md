@@ -44,7 +44,7 @@ Jira connectivity failed.
 
 acli setup:
   ~/projects/personal/claude-config/install-acli.sh
-  acli jira auth login --site starktechgroup.atlassian.net
+  acli jira auth login --site <your-atlassian-site>.atlassian.net
 ```
 
 ---
@@ -444,9 +444,9 @@ gh pr edit $PR_NUMBER --add-label "dependencies" --repo "$OWNER/$REPO"
 
 ### 6.7 Set Assignee
 
-Use the known GitHub username (do NOT call `gh api user`):
+Use your configured GitHub username (do NOT call `gh api user`):
 ```
-$GH_USER = "starkmichelsc"
+$GH_USER = "<your-github-username>"
 ```
 
 Assign:
@@ -457,10 +457,10 @@ gh pr edit $PR_NUMBER --add-assignee "$GH_USER" --repo "$OWNER/$REPO"
 ### 6.8 Add Reviewers
 
 ```bash
-gh pr edit $PR_NUMBER --add-reviewer "stark-tech-group/tsp-admin-contributors" --add-reviewer "stark-tech-group/tsp-contributors" --add-reviewer "copilot-pull-request-reviewer" --repo "$OWNER/$REPO"
+gh pr edit $PR_NUMBER --add-reviewer "<org>/<team-admin-reviewers>" --add-reviewer "<org>/<team-contributors>" --add-reviewer "copilot-pull-request-reviewer" --repo "$OWNER/$REPO"
 ```
 
-**Note:** All three reviewers (tsp-admin-contributors, tsp-contributors, and copilot-pull-request-reviewer) are always requested.
+**Note:** All three reviewers (admin team, contributor team, and copilot-pull-request-reviewer) are always requested.
 
 ---
 
@@ -474,7 +474,7 @@ Ship-It Complete!
 Repo:       $OWNER/$REPO
 Branch:     $BRANCH
 Base:       dev
-Jira:       $JIRA_TICKET (https://starktechgroup.atlassian.net/browse/$JIRA_TICKET)
+Jira:       $JIRA_TICKET (https://<your-atlassian-site>.atlassian.net/browse/$JIRA_TICKET)
 PR:         #$PR_NUMBER [DRAFT] (https://github.com/$OWNER/$REPO/pull/$PR_NUMBER)
 Assignee:   $GH_USER
 Reviewers:  tsp-admin-contributors, tsp-contributors, copilot-pull-request-reviewer
@@ -497,7 +497,7 @@ At any point if an error occurs:
 **Common errors to handle:**
 - Git authentication failure
 - GitHub API rate limit
-- Jira auth failure — run `acli jira auth login --site starktechgroup.atlassian.net`
+- Jira auth failure — run `acli jira auth login --site <your-atlassian-site>.atlassian.net`
 - Pre-commit hook failure -> STOP, do not push, show hook output
 - Branch protection rules preventing push
 - PR already exists
@@ -519,7 +519,7 @@ gh auth login
 2. **acli CLI** - For all Jira operations:
 ```bash
 ~/projects/personal/claude-config/install-acli.sh
-acli jira auth login --site starktechgroup.atlassian.net
+acli jira auth login --site <your-atlassian-site>.atlassian.net
 ```
 
 ---
