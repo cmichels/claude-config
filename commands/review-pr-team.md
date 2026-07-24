@@ -669,18 +669,22 @@ Track for the review body:
 
 ### 7c: Determine Verdict
 
+**The final verdict is binary — always `APPROVE` or `REQUEST_CHANGES`, never `COMMENT`.**
+
 **Style and coverage reviewers do NOT affect the verdict.** Only `security-and-errors`, `code-quality`, and `architecture` determine the final event:
 
 1. If ANY of these 3 returns `request_changes` → `REQUEST_CHANGES`
-2. If ALL 3 return `approve` → `APPROVE`
-3. Otherwise → `COMMENT`
+2. If any of these 3 returns `comment`, resolve it to a side: unaddressed **critical or high** findings in that domain → treat as `request_changes`; medium and below → treat as `approve`
+3. If all 3 resolve to `approve` → `APPROVE`
+
+Non-blocking findings still get posted as inline comments — an `APPROVE` with comments is the correct shape for "good to merge, here are some notes."
 
 ### 7d: Compile Review Body
 
 ```markdown
 ## PR Review Summary
 
-**Verdict**: [Approved | Changes Requested | Reviewed with Comments]
+**Verdict**: [Approved | Changes Requested]
 
 ### Code Quality
 [Summary from code-quality reviewer]
@@ -754,7 +758,7 @@ Post body, verdict, and inline comments in a single call:
 cat > /tmp/pr-review-payload.json <<'REVIEW_JSON_EOF'
 {
   "body": "<compiled review body>",
-  "event": "<APPROVE|REQUEST_CHANGES|COMMENT>",
+  "event": "<APPROVE|REQUEST_CHANGES>",
   "comments": [
     {"path": "path/to/file.ext", "line": 42, "body": "<comment body>"}
   ]
@@ -810,7 +814,7 @@ If Attempt 1 fails with a line-resolution error (typical messages: `"pull_reques
 cat > /tmp/pr-review-payload.json <<'REVIEW_JSON_EOF'
 {
   "body": "<body content with inlined comments appended>",
-  "event": "<APPROVE|REQUEST_CHANGES|COMMENT>"
+  "event": "<APPROVE|REQUEST_CHANGES>"
 }
 REVIEW_JSON_EOF
 
@@ -840,7 +844,7 @@ If successful, record: `post_method = "gh api (comments inlined)"`, `post_succes
 ```markdown
 ## PR Review Complete: #<number> - <title>
 
-**Verdict**: APPROVED / CHANGES REQUESTED / COMMENTED
+**Verdict**: APPROVED / CHANGES REQUESTED
 **Posted to GitHub**: Yes (gh api) | Yes (gh api, comments inlined) | Skipped (user choice) | Failed
 **Review method**: Agent team (4 reviewers on $REVIEWER_MODEL + lead)
 
@@ -913,6 +917,7 @@ If a teammate rejects shutdown or is unresponsive, note it in the output and pro
 - Skip binary files when reading content
 - If a reviewer agent fails or goes unresponsive, note it in the summary and continue with remaining results — a 3-reviewer synthesis is still valuable
 - **Never block a PR solely on style or coverage findings**
+- **The final review event is always `APPROVE` or `REQUEST_CHANGES` — never `COMMENT`.** Reviewer-level `comment` severities are resolved to a side in Step 7c; they never produce a fence-sitting final verdict.
 - **Motivation & Intent Analysis** is terminal-only — not in the GitHub review body
 - **Never silently fail on posting** — MCP and CLI both fail → ask the user to intervene
 - **Never embed inline comment content in the review body text** — all inline content must go through the `comments` array (Attempt 1), the body fallback list (Attempt 1b), or the verification follow-up comment (Attempt 1 Verification)
