@@ -1,6 +1,7 @@
 # ===== SENSITIVE — never commit =====
 .mcp.json
 settings.json
+settings.local.json
 mcp-needs-auth-cache.json
 stats-cache.json
 statsig/

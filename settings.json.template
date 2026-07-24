@@ -1,8 +1,8 @@
 {
   "env": {
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
-    "BASH_MAX_OUTPUT_LENGTH": 150000,
-    "ENABLE_SEARCH_TOOL": true
+    "BASH_MAX_OUTPUT_LENGTH": "150000",
+    "ENABLE_SEARCH_TOOL": "true"
   },
   "includeCoAuthoredBy": false,
   "permissions": {
@@ -304,6 +304,7 @@
     ],
     "defaultMode": "default"
   },
+  "model": "opus[1m]",
   "hooks": {
     "PreToolUse": [
       {
@@ -400,6 +401,5 @@
   "fileCheckpointingEnabled": false,
   "teammateMode": "auto",
   "remoteControlAtStartup": false,
-  "useAutoModeDuringPlan": true,
-  "model": "opus[1m]"
+  "useAutoModeDuringPlan": true
 }

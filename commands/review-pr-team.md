@@ -607,7 +607,7 @@ All initial reviews are complete. This is the cross-review discussion phase.
 3. If you disagree with a finding from another reviewer (e.g., they flagged something as a bug but you recognize it as an intentional pattern per CLAUDE.md), say so and explain why.
 4. Challenge findings you believe are false positives. The goal is accurate findings, not maximum findings.
 
-Reply with your top 3 findings and any cross-domain flags. Then go idle.
+Reply with your top 3 findings and any cross-domain flags, then go idle. After going idle, stay responsive: if the lead or another reviewer messages you again (e.g., to confirm coverage, share findings, or follow up on a cross-domain flag), treat it as an actionable prompt and respond. Do not stop responding until you receive an explicit `shutdown_request`.
 ```
 
 ### 6c: Cross-Review Timeout & Retry Protocol
@@ -669,18 +669,22 @@ Track for the review body:
 
 ### 7c: Determine Verdict
 
+**The final verdict is binary — always `APPROVE` or `REQUEST_CHANGES`, never `COMMENT`.**
+
 **Style and coverage reviewers do NOT affect the verdict.** Only `security-and-errors`, `code-quality`, and `architecture` determine the final event:
 
 1. If ANY of these 3 returns `request_changes` → `REQUEST_CHANGES`
-2. If ALL 3 return `approve` → `APPROVE`
-3. Otherwise → `COMMENT`
+2. If any of these 3 returns `comment`, resolve it to a side: unaddressed **critical or high** findings in that domain → treat as `request_changes`; medium and below → treat as `approve`
+3. If all 3 resolve to `approve` → `APPROVE`
+
+Non-blocking findings still get posted as inline comments — an `APPROVE` with comments is the correct shape for "good to merge, here are some notes."
 
 ### 7d: Compile Review Body
 
 ```markdown
 ## PR Review Summary
 
-**Verdict**: [Approved | Changes Requested | Reviewed with Comments]
+**Verdict**: [Approved | Changes Requested]
 
 ### Code Quality
 [Summary from code-quality reviewer]
@@ -710,12 +714,41 @@ corroborations, resolved contradictions, escalated issues]
 
 ---
 
+## Step 7e: Pre-flight Line Validation
+
+Before touching the GitHub API, validate every inline comment's line number locally. This is a **read-only local check** — no API calls, no test posts.
+
+For each `(path, line)` pair in the merged inline comments:
+
+```bash
+# Get hunk ranges for a file: each @@ -old +new_start,new_count @@ line
+git diff $BASE_BRANCH..HEAD -- "$path" | grep "^@@"
+```
+
+Parse each hunk header to extract the new-file range: `+new_start,new_count` means the hunk covers file lines `[new_start, new_start + new_count - 1]`. If `new_count` is omitted it defaults to `1`.
+
+A comment at line `L` is **resolvable** if `new_start <= L <= new_start + new_count - 1` for any hunk in that file.
+
+**Split the comment list:**
+- `$RESOLVABLE[]` — lines confirmed inside a diff hunk → go in the `comments` array
+- `$UNRESOLVABLE[]` — lines not in any hunk (pre-existing unchanged code, outside context window) → moved to the "Additional Findings" section of the review body, formatted as:
+  ```
+  **`path/to/file.go:L`** — [Category] Comment body
+  ```
+
+Update the review body to include any `$UNRESOLVABLE[]` items before posting. Do not guess or adjust line numbers to make them fit — if a line isn't in the diff, it goes in the body.
+
+**Absolute prohibition:** Never post a review with `"body": "test"` or any other throwaway content to probe line resolution. The local diff check above is the correct validation method. GitHub submitted reviews cannot be deleted.
+
+---
+
 ## Step 8: Post to GitHub
 
 **Posting rules** (apply to all attempts):
 - **Never modify the review content during posting** — post exactly what synthesis produced. Don't reshape, condense, or "fix" comments at posting time.
 - **Do not retry the same method unprompted** — try Attempt 1 once, Attempt 2 once, then escalate. No silent loops.
 - **Preserve markdown formatting** through both posting paths — code blocks, lists, headings, and links must survive the comments-inlined retry.
+- **Never post diagnostic or test reviews** — do not post reviews with placeholder bodies (`"test"`, `"draft"`, etc.) to probe line resolution or debug API behavior. Validate locally with `git diff` first (Step 7e). GitHub submitted reviews are immutable and cannot be deleted.
 
 ### Attempt 1: Post the full review payload via gh api
 
@@ -725,7 +758,7 @@ Post body, verdict, and inline comments in a single call:
 cat > /tmp/pr-review-payload.json <<'REVIEW_JSON_EOF'
 {
   "body": "<compiled review body>",
-  "event": "<APPROVE|REQUEST_CHANGES|COMMENT>",
+  "event": "<APPROVE|REQUEST_CHANGES>",
   "comments": [
     {"path": "path/to/file.ext", "line": 42, "body": "<comment body>"}
   ]
@@ -781,7 +814,7 @@ If Attempt 1 fails with a line-resolution error (typical messages: `"pull_reques
 cat > /tmp/pr-review-payload.json <<'REVIEW_JSON_EOF'
 {
   "body": "<body content with inlined comments appended>",
-  "event": "<APPROVE|REQUEST_CHANGES|COMMENT>"
+  "event": "<APPROVE|REQUEST_CHANGES>"
 }
 REVIEW_JSON_EOF
 
@@ -811,7 +844,7 @@ If successful, record: `post_method = "gh api (comments inlined)"`, `post_succes
 ```markdown
 ## PR Review Complete: #<number> - <title>
 
-**Verdict**: APPROVED / CHANGES REQUESTED / COMMENTED
+**Verdict**: APPROVED / CHANGES REQUESTED
 **Posted to GitHub**: Yes (gh api) | Yes (gh api, comments inlined) | Skipped (user choice) | Failed
 **Review method**: Agent team (4 reviewers on $REVIEWER_MODEL + lead)
 
@@ -884,6 +917,7 @@ If a teammate rejects shutdown or is unresponsive, note it in the output and pro
 - Skip binary files when reading content
 - If a reviewer agent fails or goes unresponsive, note it in the summary and continue with remaining results — a 3-reviewer synthesis is still valuable
 - **Never block a PR solely on style or coverage findings**
+- **The final review event is always `APPROVE` or `REQUEST_CHANGES` — never `COMMENT`.** Reviewer-level `comment` severities are resolved to a side in Step 7c; they never produce a fence-sitting final verdict.
 - **Motivation & Intent Analysis** is terminal-only — not in the GitHub review body
 - **Never silently fail on posting** — MCP and CLI both fail → ask the user to intervene
 - **Never embed inline comment content in the review body text** — all inline content must go through the `comments` array (Attempt 1), the body fallback list (Attempt 1b), or the verification follow-up comment (Attempt 1 Verification)
