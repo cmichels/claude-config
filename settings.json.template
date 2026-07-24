@@ -124,7 +124,7 @@
       "Bash(gh api repos/*/issues*)",
       "Bash(gh search*)",
       "Bash(gh gpg-key list*)",
-      "Bash(/home/kuda/.claude/bin/*)",
+      "Bash(__CLAUDE_HOME__/.claude/bin/*)",
       "Bash(ls -d __CLAUDE_PROJECTS_ROOT__/__CLAUDE_PRIMARY_PROJECT__/*)",
       "Bash(mkdir __CLAUDE_PROJECTS_ROOT__/__CLAUDE_PRIMARY_PROJECT__/*)",
       "Bash(mkdir -p __CLAUDE_PROJECTS_ROOT__/__CLAUDE_PRIMARY_PROJECT__/*)",
@@ -300,11 +300,17 @@
       "mcp__plugin_playwright_playwright__browser_generate_playwright_test",
       "mcp__plugin_playwright_playwright__browser_pdf_save",
       "mcp__plugin_context7_context7__resolve-library-id",
-      "mcp__plugin_context7_context7__query-docs"
+      "mcp__plugin_context7_context7__query-docs",
+      "Bash(cd __CLAUDE_PROJECTS_ROOT__/personal/pr-monitor && go build -o /dev/null ./... 2>&1)",
+      "Bash(apt-mark showmanual:*)",
+      "Bash(dpkg -l)",
+      "Bash(python3 --version 2>/dev/null; pip3 list 2>/dev/null | head -40; echo \"---\"; ls ~/.local/lib/python*/site-packages/ 2>/dev/null | head -20)",
+      "Bash(ls ~/.sdkman/candidates/ 2>/dev/null; echo \"---\"; java --version 2>/dev/null; echo \"---\"; ls ~/.sdkman/candidates/java/ 2>/dev/null | head -10)",
+      "Bash(apt-cache show:*)"
     ],
     "defaultMode": "default"
   },
-  "model": "opus[1m]",
+  "model": "claude-fable-5[1m]",
   "hooks": {
     "PreToolUse": [
       {
@@ -317,7 +323,7 @@
           },
           {
             "type": "command",
-            "command": "~/bin/claude-preflight.sh --once 2>&1",
+            "command": "p=\"$HOME/.claude/bin/claude-preflight.sh\"; [ -x \"$p\" ] || exit 0; \"$p\" --once 2>&1",
             "statusMessage": "Environment preflight check"
           }
         ]
@@ -349,7 +355,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "input=$(cat); cmd=$(echo \"$input\" | jq -r '.tool_input.command // \"\"'); if echo \"$cmd\" | grep -qE 'git commit'; then sig=$(git log -1 --show-signature 2>&1); if echo \"$sig\" | grep -q 'Good signature'; then echo 'GPG signature verified.'; else echo 'WARNING: Last commit may not be GPG-signed. Run ~/bin/claude-preflight.sh to diagnose.' >&2; fi; fi; exit 0",
+            "command": "input=$(cat); cmd=$(echo \"$input\" | jq -r '.tool_input.command // \"\"'); if echo \"$cmd\" | grep -qE 'git commit'; then sig=$(git log -1 --show-signature 2>&1); if echo \"$sig\" | grep -q 'Good signature'; then echo 'GPG signature verified.'; else echo 'WARNING: Last commit may not be GPG-signed. Run ~/.claude/bin/claude-preflight.sh to diagnose.' >&2; fi; fi; exit 0",
             "statusMessage": "Verifying GPG commit signature"
           }
         ]
@@ -392,14 +398,18 @@
     "atlassian@claude-plugins-official": false,
     "context7@claude-plugins-official": true
   },
+  "outputStyle": "Explanatory",
   "alwaysThinkingEnabled": true,
-  "effortLevel": "high",
+  "effortLevel": "xhigh",
+  "tui": "fullscreen",
   "autoMemoryEnabled": true,
+  "skipDangerousModePermissionPrompt": true,
+  "skipWorkflowUsageWarning": true,
   "editorMode": "vim",
   "verbose": true,
   "autoCompactEnabled": false,
   "fileCheckpointingEnabled": false,
-  "teammateMode": "auto",
+  "teammateMode": "tmux",
   "remoteControlAtStartup": false,
   "useAutoModeDuringPlan": true
 }

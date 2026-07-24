@@ -19,7 +19,7 @@
 - `xdg-open` / browser open commands may fail silently — don't rely on them
 - PATH ordering matters: always prepend (not append) when overriding system tools
 - Mac-specific tools and LSPs won't work — check for WSL2 compatibility before installing
-- **Preflight script:** `~/bin/claude-preflight.sh` validates the full WSL2 environment (gpg-agent, pinentry, win32yank, fzf PATH, Docker, GPG signing cache). Suggest running it whenever WSL2 environment issues are suspected or debugging is going in circles. Read the output and course-correct before continuing.
+- **Preflight script:** `~/.claude/bin/claude-preflight.sh` validates the full WSL2 environment (gpg-agent, pinentry, win32yank, fzf PATH, Docker, GPG signing cache). Suggest running it whenever WSL2 environment issues are suspected or debugging is going in circles. Read the output and course-correct before continuing.
 - Clipboard bridging (Windows ↔ tmux) configured via `win32yank`
 
 ## Config Editing
