@@ -57,6 +57,9 @@ reviews/
 # Playwright MCP state
 .playwright-mcp/
 
+# Local Python env
+.venv/
+
 # OS junk
 .DS_Store
 ._*

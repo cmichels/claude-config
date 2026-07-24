@@ -10,34 +10,45 @@ As the Claude iteration cycle accelerated (tuning prompts, tightening constraint
 
 This repository provides a centralized, portable config system that persists across machines and can be symlinked like a dotfiles setup.
 
+## Prerequisites
+
+Required before setup — the config assumes these exist:
+
+- `git`, `gh` (authenticated: `gh auth login`), and `jq` — hooks and status line depend on `jq`
+- GPG signing configured: key imported, `commit.gpgsign true`, `user.signingkey` set, and on WSL2 `pinentry-mode loopback` in `~/.gnupg/gpg.conf` — all commits are signed, and a hook warns on unsigned ones
+- WSL2 only: `win32yank` on `$PATH` for clipboard bridging
+
+Optional, degrade gracefully if absent:
+
+- `yq` — enables the preflight script's friction-registry checks
+- `acli` for Jira workflows — install with `./install-acli.sh`
+- Go toolchain — enables the auto-`gofmt`/`go vet` hook on Go file edits
+
 ## Quick Setup (new machine)
 
 ```bash
-# 1. Clone into ~/.claude
-git clone git@github.com:cmichels/claude-config.git ~/.claude
+# 1. Clone the repo (NOT into ~/.claude — the script refuses that)
+git clone https://github.com/cmichels-engineering/claude-config ~/projects/personal/claude-config
 
-# 2. Set your GitHub PAT
-export GITHUB_PERSONAL_ACCESS_TOKEN="your-token-here"
-# Add to ~/.zshrc or ~/.zshenv for persistence
-
-# 3. (Optional) set local path variables for permission allowlists
+# 2. (Optional) set local path variables for permission allowlists
 export CLAUDE_PROJECTS_ROOT="$HOME/projects"
 export CLAUDE_PRIMARY_PROJECT="work"
 
-# 4. Run setup
-cd ~/.claude && ./setup.sh
+# 3. Run setup
+~/projects/personal/claude-config/setup.sh
 ```
 
 The setup script will:
-- Generate `.mcp.json` from template with your PAT
-- Generate machine-local `settings.json` from `settings.json.template`
+- Generate `settings.json` from `settings.json.template` into the repo working tree (gitignored)
 - Apply `CLAUDE_PROJECTS_ROOT` and `CLAUDE_PRIMARY_PROJECT` values into path-specific permission rules
-- Create required local directories (gitignored)
-- Optionally restore project memory files with updated paths
+- Symlink `settings.json`, `CLAUDE.md`, `review-guidelines.md`, `status-line.sh`, `agents/`, `commands/`, and `bin/` into `~/.claude/`
+- Create required local runtime directories in `~/.claude/`
+
+The script is idempotent — re-running skips anything already in place, and pre-existing real files in `~/.claude/` are backed up to `*.pre-setup.bak` before being replaced with symlinks.
 
 ### Required Local Settings
 
-- `settings.json` is machine-local and intentionally gitignored.
+- `settings.json` lives in the repo working tree but is intentionally gitignored (machine-local).
 - Tracked config lives in `settings.json.template` with placeholders.
 - If `settings.json` already exists, setup preserves it.
 - If `settings.json` is missing, setup generates it from the template.
@@ -51,9 +62,7 @@ The setup script will:
 | `commands/` | Custom slash commands (/worktree, /ship-it, /review-pr-team, etc.) |
 | `agents/` | Custom agent definitions (golang-expert, pr-review suite) |
 | `hooks/` | Hook examples |
-| `memories/` | Portable project memory (path-remappable) |
 | `status-line.sh` | Custom status bar script |
-| `.mcp.json.template` | MCP server config template (no secrets) |
 | `setup.sh` | New machine bootstrap |
 | `bin/` | CLI scripts (session management, repo helpers) |
 
@@ -102,26 +111,16 @@ Also includes utility scripts used by Claude Code skills:
 
 ## What's NOT Tracked
 
-Session histories, debug logs, telemetry, caches, plugins (auto-reinstall), `.mcp.json` (contains PAT), `settings.json` (machine-local).
+Session histories, debug logs, telemetry, caches, plugins (auto-reinstall), `settings.json` (machine-local).
 
 ## Public vs Local Artifacts
 
 | Type | Examples | Git status |
 |---|---|---|
 | Portable tracked config | `settings.json.template`, `commands/`, `agents/`, `bin/`, `CLAUDE.md` | Tracked |
-| Machine-local generated config | `settings.json`, `.mcp.json` | Ignored |
+| Machine-local generated config | `settings.json` | Ignored |
 | Local runtime state | `projects/`, `history.jsonl`, `cache/`, `tasks/`, `telemetry/` | Ignored |
 
-## Updating Memory
+## Moving Memory to a New Machine
 
-Memory files in `memories/` are snapshots. As Claude learns new things per-project, run this to re-export:
-
-```bash
-cd ~/.claude
-for memdir in projects/*/memory; do
-  [ -d "$memdir" ] || continue
-  project=$(echo "$memdir" | sed 's|projects/||;s|/memory||')
-  mkdir -p "memories/$project"
-  command cp -r "$memdir"/* "memories/$project/" 2>/dev/null || true
-done
-```
+Per-project auto-memory lives in `~/.claude/projects/<encoded-path>/memory/` and is not tracked in this repo. To carry it to a new machine, copy each project's `memory/` directory to the same encoded path under the new machine's `~/.claude/projects/`. Directory names encode the project's absolute path — if project paths are identical across machines, no renaming is needed.
