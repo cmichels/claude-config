@@ -47,7 +47,7 @@ Examples:
 Search for `session.json` in this priority order using the pre-built bin script (auto-approved):
 
 ```bash
-/home/kuda/.claude/bin/find-session.sh "$DIR"
+~/.claude/bin/find-session.sh "$DIR"
 ```
 
 Omit the `$DIR` argument if `--dir` was not provided. The script checks `$DIR/session.json`, `./session.json`, and `./screenshots/session.json` in order. Outputs `FOUND: <path>` followed by the file contents, or `NO_SESSION` (exit 1) if none found.

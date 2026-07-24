@@ -16,15 +16,15 @@ You are setting up a fully-configured git worktree for Jira ticket implementatio
 Run the pre-built repo-info script (auto-approved via bin/ permission):
 
 ```bash
-/home/kuda/.claude/bin/repo-info.sh
+~/.claude/bin/repo-info.sh
 ```
 
 This outputs key-value pairs:
 ```
 is_git_repo: true
 repo_name: alarm-service
-parent_dir: /home/kuda/projects/tsp
-toplevel: /home/kuda/projects/tsp/alarm-service
+parent_dir: /home/user/projects/tsp
+toplevel: /home/user/projects/tsp/alarm-service
 branch: dev
 ```
 
@@ -65,7 +65,7 @@ git worktree list
 
 Also check if the target directory already exists using the pre-built bin script (auto-approved):
 ```bash
-/home/kuda/.claude/bin/worktree-exists.sh "$WORKTREE_PATH"
+~/.claude/bin/worktree-exists.sh "$WORKTREE_PATH"
 ```
 Outputs `EXISTS` (exit 0) or `NOT_EXISTS` (exit 1).
 
@@ -187,7 +187,7 @@ Use `$TOPLEVEL` from Step 1.1 as `$SOURCE_ROOT`.
 Run the pre-built config checker script (auto-approved via bin/ permission):
 
 ```bash
-/home/kuda/.claude/bin/worktree-check-configs.sh "$SOURCE_ROOT" "$WORKTREE_PATH"
+~/.claude/bin/worktree-check-configs.sh "$SOURCE_ROOT" "$WORKTREE_PATH"
 ```
 
 This outputs which files exist. **Only copy what exists:**
@@ -209,7 +209,7 @@ This outputs which files exist. **Only copy what exists:**
 Run the same script with `--copy` to detect and copy in one pass (auto-approved via bin/ permission):
 
 ```bash
-/home/kuda/.claude/bin/worktree-check-configs.sh "$SOURCE_ROOT" "$WORKTREE_PATH" --copy
+~/.claude/bin/worktree-check-configs.sh "$SOURCE_ROOT" "$WORKTREE_PATH" --copy
 ```
 
 This uses `command cp` internally to bypass shell aliases. It only copies files/directories that exist and reports what was copied.
@@ -235,7 +235,7 @@ Contents (replace variables with actual values, ensure valid JSON — escape any
 
 ### 4.5 Symlink Project Memory
 
-Claude Code stores per-project memory at `~/.claude/projects/<path-key>/memory/`, where `<path-key>` is the absolute project path with `/` replaced by `-` (e.g., `/home/kuda/projects/tsp/alarm-service` → `-home-kuda-projects-tsp-alarm-service`).
+Claude Code stores per-project memory at `~/.claude/projects/<path-key>/memory/`, where `<path-key>` is the absolute project path with `/` replaced by `-` (e.g., `/home/user/projects/tsp/alarm-service` → `-home-user-projects-tsp-alarm-service`).
 
 Worktrees get a different path key than the source repo, so they start with an empty memory store. Fix this by symlinking the worktree's memory directory to the source repo's memory.
 

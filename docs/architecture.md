@@ -20,7 +20,7 @@ This repository provides a centralized, portable config system that persists acr
 ## Runtime Model
 
 - Tracked configuration is portable and repository-safe.
-- Machine-local artifacts (`settings.json`, `.mcp.json`, session state) are generated and gitignored.
+- Machine-local artifacts (`settings.json`, session state) are generated and gitignored.
 - Environment-specific path requirements are applied at setup time via:
   - `CLAUDE_PROJECTS_ROOT`
   - `CLAUDE_PRIMARY_PROJECT`
