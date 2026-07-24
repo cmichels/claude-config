@@ -16,14 +16,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Python compile check
-        run: python -m compileall .
-
       - name: Shell syntax check
         run: |
           set -e
@@ -32,3 +24,29 @@ jobs:
               bash -n "$f"
             fi
           done
+
+      - name: JSON template validity
+        run: jq empty settings.json.template
+
+      - name: Agent and command frontmatter
+        run: |
+          set -e
+          for f in agents/*.md commands/*.md; do
+            if [ "$(head -n1 "$f")" != "---" ]; then
+              echo "::error file=$f::first line must be exactly '---' (YAML frontmatter opener)"
+              exit 1
+            fi
+            if [ "$(grep -c '^---$' "$f")" -lt 2 ]; then
+              echo "::error file=$f::frontmatter block is never closed with '---'"
+              exit 1
+            fi
+          done
+
+      - name: Personal path leak check
+        run: |
+          leaks=$(git grep -nE '/home/[a-z0-9]+' -- ':!.github/workflows/ci.yml' | grep -v '/home/user' || true)
+          if [ -n "$leaks" ]; then
+            echo "$leaks"
+            echo "::error::personal absolute paths found in tracked files (use ~ or /home/user in examples)"
+            exit 1
+          fi

@@ -76,7 +76,7 @@ Run these in parallel:
 
 6. **Review thread resolution status**:
    ```bash
-   /home/kuda/.claude/bin/pr-review-threads.sh $OWNER $REPO $PR_NUMBER
+   ~/.claude/bin/pr-review-threads.sh $OWNER $REPO $PR_NUMBER
    ```
    Extract: thread ID, `isResolved`, `isOutdated`, path, line, comment chain.
 

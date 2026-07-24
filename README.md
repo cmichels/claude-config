@@ -14,7 +14,7 @@ This repository provides a centralized, portable config system that persists acr
 
 Required before setup — the config assumes these exist:
 
-- `git`, `gh` (authenticated: `gh auth login`), and `jq` — hooks and status line depend on `jq`
+- `git`, `gh` (authenticated: `gh auth login`), `jq`, `zsh`, and `python3` — hooks depend on `jq`; the status line runs under `zsh` and uses `jq` and `python3`
 - GPG signing configured: key imported, `commit.gpgsign true`, `user.signingkey` set, and on WSL2 `pinentry-mode loopback` in `~/.gnupg/gpg.conf` — all commits are signed, and a hook warns on unsigned ones
 - WSL2 only: `win32yank` on `$PATH` for clipboard bridging
 
@@ -23,6 +23,8 @@ Optional, degrade gracefully if absent:
 - `yq` — enables the preflight script's friction-registry checks
 - `acli` for Jira workflows — install with `./install-acli.sh`
 - Go toolchain — enables the auto-`gofmt`/`go vet` hook on Go file edits
+- `task-ctl` on `$PATH` — companion CLI from the private `starkmichelsc/task-ctl` repo; required only by `/k-suspend` and `/k-resume`
+- A Nerd Font in the terminal — the status line renders Nerd Font glyphs (built against MesloLGS NF)
 
 ## Quick Setup (new machine)
 
@@ -60,7 +62,7 @@ The script is idempotent — re-running skips anything already in place, and pre
 | `CLAUDE.md` | Global instructions (personality, workflow, git conventions) |
 | `settings.json.template` | Portable template for permissions, hooks, plugins, status line |
 | `commands/` | Custom slash commands (/worktree, /ship-it, /review-pr-team, etc.) |
-| `agents/` | Custom agent definitions (golang-expert, pr-review suite) |
+| `agents/` | Custom agent definitions (pr-review suite: security, code quality, architecture, style) |
 | `hooks/` | Hook examples |
 | `status-line.sh` | Custom status bar script |
 | `setup.sh` | New machine bootstrap |
@@ -83,6 +85,7 @@ Session management tools for running multiple Claude sessions across tmux window
 | `ccs` | `ccs [args...]` | Start a new Claude session. Generates a session ID, saves it keyed to the current tmux pane, and launches `claude --session-id <id> --name <window>`. All args passed through. |
 | `cr` | `cr [args...]` | Resume the saved session for the current tmux pane. Falls back to cwd-based lookup if pane ID isn't found. |
 | `cls` | `cls` | List all saved pane-session mappings (pane, window name, cwd, session ID, timestamp). |
+| `ccc` | `ccc [-a]` | Clean stale pane-session mappings for panes no longer in tmux; `-a` removes all saved sessions. |
 
 Session state is stored in `~/.claude/pane-sessions/<pane-id>.json`.
 
@@ -108,6 +111,11 @@ Also includes utility scripts used by Claude Code skills:
 |---|---|
 | `repo-info.sh` | Outputs git repo metadata (name, branch, toplevel path) |
 | `worktree-exists.sh` | Checks if a directory exists (exit 0/1) |
+| `worktree-check-configs.sh` | Detects (and with `--copy`, copies) local config files from a source repo into a worktree |
+| `pr-review-threads.sh` | Fetches PR review threads with resolution status via GitHub GraphQL (read-only) |
+| `find-session.sh` | Locates a screenshot `session.json` in priority order (used by /screenshot) |
+| `permission-audit.sh` | Generates a permission profile from a Claude tool audit log |
+| `claude-preflight.sh` | WSL2 environment preflight (gpg-agent, pinentry, clipboard, PATH); `--once` mode runs from a PreToolUse hook |
 
 ## What's NOT Tracked
 

@@ -1,0 +1,59 @@
+## Friction Registry
+## Known environment issues, detection commands, and fixes.
+## Used by claude-preflight.sh --registry to auto-detect and resolve issues.
+## Add new entries as friction is encountered during sessions.
+
+issues:
+  - id: gpg-agent-dead
+    description: "GPG agent not running — commits will fail to sign"
+    detect: "gpg-connect-agent --no-autostart 'getinfo version' /bye >/dev/null 2>&1"
+    fix: "gpgconf --kill gpg-agent && gpgconf --launch gpg-agent"
+    auto_fix: true
+    critical: true
+
+  - id: gpg-cache-cold
+    description: "GPG passphrase cache not warm — first commit will hang waiting for passphrase"
+    detect: "echo 'preflight-test' | gpg --clearsign 2>&1 | grep -q 'BEGIN PGP SIGNED MESSAGE'"
+    fix: null
+    auto_fix: false
+    critical: false
+    message: "GPG passphrase cache cold — run: echo test | gpg --clearsign"
+
+  - id: nvm-lazy-load
+    description: "Node/npm not on PATH due to NVM lazy loading"
+    detect: "command -v node >/dev/null 2>&1"
+    fix: "export NVM_DIR=\"$HOME/.nvm\" && [ -s \"$NVM_DIR/nvm.sh\" ] && . \"$NVM_DIR/nvm.sh\""
+    auto_fix: true
+    critical: false
+
+  - id: docker-not-running
+    description: "Docker daemon not running"
+    detect: "docker info >/dev/null 2>&1"
+    fix: null
+    auto_fix: false
+    critical: false
+    message: "Docker is not running. Start it manually if needed for this session."
+
+  - id: win32yank-missing
+    description: "Clipboard bridge not available — copy/paste between WSL2 and Windows broken"
+    detect: "command -v win32yank.exe >/dev/null 2>&1"
+    fix: null
+    auto_fix: false
+    critical: false
+    message: "win32yank not on PATH — clipboard operations will fail"
+
+  - id: fzf-system-binary
+    description: "fzf resolves to system binary instead of user install"
+    detect: "command -v fzf >/dev/null 2>&1 && ! command -v fzf 2>/dev/null | grep -q '^/usr/bin/fzf'"
+    fix: null
+    auto_fix: false
+    critical: false
+    message: "fzf resolves to system binary — prepend user install to PATH"
+
+  - id: helm-balto-cdn
+    description: "Helm Balto CDN unreachable — apt operations may hang"
+    detect: "curl -sf --max-time 3 https://baltocdn.com/helm/signing.asc >/dev/null 2>&1"
+    fix: null
+    auto_fix: false
+    critical: false
+    message: "Helm Balto CDN unreachable — skip apt upgrade if it hangs"

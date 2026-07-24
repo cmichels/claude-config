@@ -37,8 +37,8 @@
 
 ## Tool Reliability and Execution
 - when asking for execution permission provide a description of what the execution will do
-- Atlassian: All Jira operations use the `acli` CLI (Atlassian MCP is disabled). Site is `<your-atlassian-site>.atlassian.net`. If `acli` returns auth errors, run `acli jira auth login --site <your-atlassian-site>.atlassian.net`. Confluence access is unavailable via acli — if Confluence content is needed, the user must check manually at `https://<your-atlassian-site>.atlassian.net/wiki`.
-- GITHUB: **Username:** use your configured local username (for example via command variable). Do not call `gh api user` just to discover it.
+- Atlassian: All Jira operations use the `acli` CLI (Atlassian MCP is disabled). Discover the configured site with `acli jira auth status`. If `acli` returns auth errors, ask the user to run `acli jira auth login` for that site (if no site is configured, ask for the site name). Confluence access is unavailable via acli — if Confluence content is needed, the user must check manually at `https://<site>.atlassian.net/wiki` using the discovered site.
+- GITHUB: **Username:** discover via `gh auth status` (it prints the logged-in account). Do not call `gh api user` just to discover it.
 - When any MCP tool hangs or becomes unresponsive for more than 30 seconds, immediately abandon it and fall back to CLI equivalents (`gh` for GitHub, `acli` for Jira). Do not retry the MCP tool more than once. Do not wait for user intervention.
 - When PR data is needed and Jira remote links don't have it, fall back to GitHub: `gh pr list --head <branch>` or `gh pr view` by branch name or ticket ID. Don't give up on finding PR data just because Jira didn't have the link.
 - When `acli` returns partial failures (404s, missing fields like sprint, unsupported parameters), don't retry the same call — switch strategies: use `acli jira board` for sprint data, use ticket links instead of remote links, and inform the user of the fallback rather than blocking.
@@ -81,7 +81,7 @@
 
 ## Code Review
 - When posting PR reviews via MCP orchestrator/subtask, if the subtask fails to post, fall back immediately to direct `gh api` or `gh pr review` CLI commands — do not retry the MCP approach.
-- When using the /ship-it command, if `acli` fails (auth or connectivity). Stop and ask the user to run `acli jira auth login --site <your-atlassian-site>.atlassian.net`.
+- When using the /ship-it command, if `acli` fails (auth or connectivity), stop and ask the user to run `acli jira auth login` (site discoverable via `acli jira auth status`).
 - Bot-generated PR reviews from Copilot ARE valid review comments. Do not filter them out when triaging PR feedback. Treat them the same as human reviewer comments.
 - When inline PR comments can't be attached to specific diff lines (line resolution fails), post them as a consolidated list in the review body rather than silently dropping them.
 - For PR reviews with large diffs (>200 files or >3000 lines), summarize the diff in chunks rather than loading the entire diff into context at once. Use targeted file reads instead of full diff fetches to avoid context window overflow.
