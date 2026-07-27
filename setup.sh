@@ -44,7 +44,7 @@ else
 fi
 
 # --- Step 2: symlink repo config into ~/.claude ---
-LINKS=(settings.json CLAUDE.md review-guidelines.md status-line.sh friction-registry.yaml agents commands bin)
+LINKS=(settings.json CLAUDE.md review-guidelines.md status-line.sh friction-registry.yaml agents commands bin skills)
 
 for name in "${LINKS[@]}"; do
   src="$REPO_DIR/$name"
